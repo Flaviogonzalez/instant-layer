@@ -30,7 +30,7 @@ func MainFile(service *Service, genconfig *GenConfig) *File {
 	)
 	return &File{
 		Name: "main.go",
-		Data: *file,
+		Data: file,
 	}
 }
 
@@ -70,7 +70,7 @@ func RoutesFile(service *Service, genconfig *GenConfig) *File {
 	)
 	return &File{
 		Name: "routes.go",
-		Data: *file,
+		Data: file,
 	}
 }
 
@@ -223,6 +223,6 @@ func ConfigFile(service *Service, genconfig *GenConfig) *File {
 	)
 	return &File{
 		Name: "config.go",
-		Data: *file,
+		Data: file,
 	}
 }
