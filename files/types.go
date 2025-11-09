@@ -46,8 +46,8 @@ type Server interface {
 }
 
 type API struct {
-	DB     Database
-	Routes []*Route
+	DB           Database
+	RoutesConfig RoutesConfig
 }
 
 type Broker struct {
@@ -97,6 +97,28 @@ type GoType struct {
 // ---------------------------------------------------------------------
 // Route / Handler / Model
 // ---------------------------------------------------------------------
+
+type RoutesConfig struct {
+	CORS        CorsOptions
+	RoutesGroup []*RoutesGroup
+}
+
+type CorsOptions struct {
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	AllowCredentials bool
+	MaxAge           int
+}
+
+type RoutesGroup struct {
+	prefix     string
+	Middleware Middleware
+	Routes     []*Route
+}
+
+type Middleware struct {
+}
 
 type Route struct {
 	Path    string // /user

@@ -171,6 +171,13 @@ func NewCompositeLit(typ ast.Expr, elts ...ast.Expr) *ast.CompositeLit {
 	}
 }
 
+func NewFuncLit(fun *ast.FuncType, body *ast.BlockStmt) *ast.FuncLit {
+	return &ast.FuncLit{
+		Type: fun,
+		Body: body,
+	}
+}
+
 func NewKeyValue(key string, value ast.Expr) *ast.KeyValueExpr {
 	return &ast.KeyValueExpr{
 		Key:   ast.NewIdent(key),

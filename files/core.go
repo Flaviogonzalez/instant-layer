@@ -17,30 +17,18 @@ func WithService(s Service) ConfigOption {
 	return func(c *GenConfig) { c.Services = append(c.Services, s) }
 }
 
-func WithPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigOption {
-	return func(c *GenConfig) { c.PackageGenerators[name] = gens }
-}
-
-func AddToPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigOption {
-	return func(c *GenConfig) {
-		if _, ok := c.PackageGenerators[name]; !ok {
-			c.PackageGenerators[name] = make([]func(*Service, *GenConfig) *File, 0)
-		}
-		c.PackageGenerators[name] = append(c.PackageGenerators[name], gens...)
-	}
-}
-
 // ---------------------------------------------------------------------
 // Default generators
 // ---------------------------------------------------------------------
 
 var defaultPackageGenerators = ServiceMap{
-	"config":   {ConfigFile},
-	"routes":   {RoutesFile},
-	"main":     {MainFile},
-	"helpers":  {},
-	"handlers": {},
-	"models":   {},
+	"config":     {ConfigFile},
+	"routes":     {RoutesFile},
+	"main":       {MainFile},
+	"helpers":    {},
+	"handlers":   {},
+	"models":     {},
+	"middleware": {},
 }
 
 // ---------------------------------------------------------------------
@@ -105,13 +93,13 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 	fset := token.NewFileSet()
 	projectRoot := filepath.Join(outputDir, projectName)
 
-	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+	if err := os.MkdirAll(projectRoot, 0755); err != nil {
 		log.Fatalf("Error creando proyecto: %v", err)
 	}
 
 	for _, svc := range c.GenConfig.Services {
 		svcPath := filepath.Join(projectRoot, svc.Name)
-		if err := os.MkdirAll(svcPath, 0o755); err != nil {
+		if err := os.MkdirAll(svcPath, 0755); err != nil {
 			log.Fatalf("Error creando servicio '%s': %v", svc.Name, err)
 		}
 
@@ -121,7 +109,7 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 		for _, pkg := range svc.Packages {
 			pkgPath := filepath.Join(svcPath, pkg.Name)
 			if pkg.Name != "main" {
-				if err := os.MkdirAll(pkgPath, 0o755); err != nil {
+				if err := os.MkdirAll(pkgPath, 0755); err != nil {
 					log.Fatalf("Error creando paquete '%s': %v", pkg.Name, err)
 				}
 			}
@@ -157,7 +145,7 @@ func writeASTFile(fset *token.FileSet, path string, node ast.Node) {
 	if err != nil {
 		log.Fatalf("Error en format.Source (%s): %v", path, err)
 	}
-	if err := os.WriteFile(path, pretty, 0o644); err != nil {
+	if err := os.WriteFile(path, pretty, 0644); err != nil {
 		log.Fatalf("Error escribiendo %s: %v", path, err)
 	}
 }
@@ -174,7 +162,7 @@ require (
 )
 `, modulePath)
 
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(content), 0644); err != nil {
 		log.Fatalf("Error escribiendo go.mod (%s): %v", dir, err)
 	}
 }

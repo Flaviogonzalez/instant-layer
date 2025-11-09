@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"instant-layer/factory"
+	"strconv"
 )
 
 func MainFile(service *Service, genconfig *GenConfig) *File {
@@ -35,6 +36,88 @@ func MainFile(service *Service, genconfig *GenConfig) *File {
 }
 
 func RoutesFile(service *Service, genconfig *GenConfig) *File {
+	var Routes []*ast.ExprStmt
+	var AllowedHeaders = []string{"Accept", "Content-Type", "Authorization"}
+	var AllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	var AllowedOrigins = []string{"*"}
+	var AllowCredentials = "false"
+	var MaxAge = 30
+
+	if _, ok := service.ServerType.(*API); ok {
+		apiConfig := service.ServerType.(*API)
+
+		if len(apiConfig.RoutesConfig.CORS.AllowedHeaders) > 0 {
+			AllowedHeaders = apiConfig.RoutesConfig.CORS.AllowedHeaders
+		}
+		if len(apiConfig.RoutesConfig.CORS.AllowedMethods) > 0 {
+			AllowedMethods = apiConfig.RoutesConfig.CORS.AllowedMethods
+		}
+		if len(apiConfig.RoutesConfig.CORS.AllowedOrigins) > 0 {
+			AllowedOrigins = apiConfig.RoutesConfig.CORS.AllowedOrigins
+		}
+
+		if apiConfig.RoutesConfig.CORS.AllowCredentials {
+			AllowCredentials = "true"
+		}
+
+		if apiConfig.RoutesConfig.CORS.MaxAge != 0 {
+			MaxAge = apiConfig.RoutesConfig.CORS.MaxAge
+		}
+
+		for _, group := range apiConfig.RoutesConfig.RoutesGroup {
+			var groupRoutes []ast.Stmt
+			for _, route := range group.Routes {
+				routeStmt := factory.NewExprStmt(
+					factory.NewSelectorCall(
+						"r",
+						route.Method,
+						factory.NewBasicLit(route.Path),
+						factory.NewSelector("handlers", route.Handler.Name),
+					),
+				)
+				groupRoutes = append(groupRoutes, routeStmt)
+			}
+			routeGroupStmt := factory.NewExprStmt(
+				factory.NewSelectorCall(
+					"mux",
+					"Route",
+					factory.NewBasicLit(group.prefix),
+					factory.NewFuncLit(
+						factory.NewFuncType(
+							factory.NewFieldList(
+								factory.NewField("r", factory.NewSelector("chi", "Router")),
+							),
+							factory.NewFieldList(),
+						),
+						factory.NewBodyStmt(groupRoutes...),
+					),
+				),
+			)
+			Routes = append(Routes, routeGroupStmt)
+		}
+	}
+
+	bodyStmts := []ast.Stmt{
+		factory.NewDefine("mux", factory.NewSelectorCall("chi", "NewRouter")),
+		factory.NewExprStmt(
+			factory.NewSelectorCall("mux", "Use", factory.NewSelectorCall("cors", "Handler", factory.NewCompositeLit(
+				factory.NewSelector("cors", "Optional"),
+				factory.NewKeyValue("AllowedOrigins", factory.NewStringSliceLit(AllowedOrigins...)),
+				factory.NewKeyValue("AllowedMethods", factory.NewStringSliceLit(AllowedMethods...)),
+				factory.NewKeyValue("AllowedHeaders", factory.NewStringSliceLit(AllowedHeaders...)),
+				factory.NewKeyValue("AllowCredentials", ast.NewIdent(AllowCredentials)),
+				factory.NewKeyValue("MaxAge", factory.NewBasicLitInt(MaxAge)),
+			))),
+		),
+		factory.NewExprStmt(factory.NewSelectorCall("mux", "Use", factory.NewSelectorCall("middleware", "Heartbeat", factory.NewBasicLit("/ping")))),
+	}
+
+	for _, route := range Routes {
+		bodyStmts = append(bodyStmts, route)
+	}
+
+	bodyStmts = append(bodyStmts, &ast.ReturnStmt{Results: []ast.Expr{ast.NewIdent("mux")}})
+
 	file := factory.NewFileNode(
 		"routes",
 		factory.NewImportDecl(
@@ -42,6 +125,7 @@ func RoutesFile(service *Service, genconfig *GenConfig) *File {
 			factory.NewImport("github.com/go-chi/chi/v5", ""),
 			factory.NewImport("github.com/go-chi/chi/v5/middleware", ""),
 			factory.NewImport("github.com/go-chi/cors", ""),
+			factory.NewImport("database/sql", ""),
 		),
 		factory.NewFuncDecl(
 			"Routes",
@@ -50,22 +134,7 @@ func RoutesFile(service *Service, genconfig *GenConfig) *File {
 				factory.NewFieldList(factory.NewField("db", &ast.StarExpr{X: factory.NewSelector("sql", "DB")})),
 				factory.NewFieldList(factory.NewField("", factory.NewSelector("http", "Handler"))),
 			),
-			factory.NewBodyStmt(
-				factory.NewDefine("mux", factory.NewSelectorCall("chi", "NewRouter")),
-				factory.NewExprStmt(
-					factory.NewSelectorCall("mux", "Use", factory.NewSelectorCall("cors", "Handler", factory.NewCompositeLit(
-						factory.NewSelector("cors", "Optional"),
-						factory.NewKeyValue("AllowedOrigins", factory.NewStringSliceLit("https://*", "http://*")),
-						factory.NewKeyValue("AllowedMethods", factory.NewStringSliceLit("POST", "GET", "DELETE", "PUT", "OPTIONS")),
-						factory.NewKeyValue("AllowedHeaders", factory.NewStringSliceLit("Accept", "Content-Type", "Authorization")),
-						factory.NewKeyValue("AllowCredentials", ast.NewIdent("true")),
-						factory.NewKeyValue("MaxAge", factory.NewBasicLitInt(30)),
-					))),
-				),
-				factory.NewExprStmt(factory.NewSelectorCall("mux", "Use", factory.NewSelectorCall("middleware", "Heartbeat", factory.NewBasicLit("/ping")))),
-				factory.NewExprStmt(factory.NewSelectorCall("mux", "Post", factory.NewBasicLit("/authenticate"), factory.NewSelector("handlers", "Authenticate"))),
-				&ast.ReturnStmt{Results: []ast.Expr{ast.NewIdent("mux")}},
-			),
+			factory.NewBodyStmt(bodyStmts...),
 		),
 	)
 	return &File{
@@ -75,19 +144,52 @@ func RoutesFile(service *Service, genconfig *GenConfig) *File {
 }
 
 func ConfigFile(service *Service, genconfig *GenConfig) *File {
+	var ImportDrivers []*ast.ImportSpec
+	var driver string
+	var timeout int
+
+	if _, ok := service.ServerType.(*API); ok {
+		if service.ServerType.(*API).DB.Driver == "pgx" {
+			ImportDrivers = []*ast.ImportSpec{
+				factory.NewImport("github.com/jackc/pgconn", "_"),
+				factory.NewImport("github.com/jackc/pgx/v5", "_"),
+				factory.NewImport("github.com/jackc/pgx/v5/stdlib", "_"),
+			}
+		}
+
+		driver = service.ServerType.(*API).DB.Driver
+		timeout = service.ServerType.(*API).DB.TimeoutConn
+
+		if service.ServerType.(*API).DB.TimeoutConn == 0 {
+			timeout = 10
+		}
+
+		if service.ServerType.(*API).DB.Driver == "" {
+			driver = "pgx"
+		}
+	}
+
+	ImportDrivers = append(
+		ImportDrivers,
+		factory.NewImport(service.Name+"/routes", ""),
+		factory.NewImport("database/sql", ""),
+		factory.NewImport("log", ""),
+		factory.NewImport("net/http", ""),
+		factory.NewImport("os", ""),
+		factory.NewImport("time", ""),
+	)
+
+	imports := factory.NewImportDecl(
+		ImportDrivers...,
+	)
+
+	if service.Port == 0 {
+		service.Port = 8080
+	}
+
 	file := factory.NewFileNode(
 		"config",
-		factory.NewImportDecl(
-			factory.NewImport("auth-service/routes", ""),
-			factory.NewImport("database/sql", ""),
-			factory.NewImport("log", ""),
-			factory.NewImport("net/http", ""),
-			factory.NewImport("os", ""),
-			factory.NewImport("time", ""),
-			factory.NewImport("github.com/jackc/pgconn", "_"),
-			factory.NewImport("github.com/jackc/pgx/v5", "_"),
-			factory.NewImport("github.com/jackc/pgx/v5/stdlib", "_"),
-		),
+		imports,
 		factory.NewVarDecl("counts", ast.NewIdent("int")),
 		factory.NewTypeStruct("Config", factory.NewFieldList(factory.NewField("Db", &ast.StarExpr{X: factory.NewSelector("sql", "DB")}))),
 		factory.NewFuncDecl(
@@ -125,7 +227,7 @@ func ConfigFile(service *Service, genconfig *GenConfig) *File {
 			factory.NewBodyStmt(
 				factory.NewDefine("server", &ast.UnaryExpr{Op: token.AND, X: factory.NewCompositeLit(
 					ast.NewIdent("http.Server"),
-					factory.NewKeyValue("Addr", factory.NewBasicLit(":80")),
+					factory.NewKeyValue("Addr", factory.NewBasicLit(":"+strconv.Itoa(service.Port))),
 					factory.NewKeyValue("Handler", factory.NewSelectorCall("routes", "Routes", factory.NewSelector("app", "Db"))),
 				)}),
 				&ast.IfStmt{
@@ -155,7 +257,7 @@ func ConfigFile(service *Service, genconfig *GenConfig) *File {
 				),
 			),
 			factory.NewBodyStmt(
-				factory.NewDefineExpectsError("db", factory.NewSelectorCall("sql", "Open", factory.NewBasicLit("pgx"), ast.NewIdent("dsn"))),
+				factory.NewDefineExpectsError("db", factory.NewSelectorCall("sql", "Open", factory.NewBasicLit(driver), ast.NewIdent("dsn"))),
 				factory.NewIfError(
 					factory.NewReturn(
 						ast.NewIdent("nil"),
@@ -206,7 +308,7 @@ func ConfigFile(service *Service, genconfig *GenConfig) *File {
 							Cond: &ast.BinaryExpr{
 								X:  ast.NewIdent("counts"),
 								Op: token.GTR,
-								Y:  factory.NewBasicLitInt(10),
+								Y:  factory.NewBasicLitInt(timeout),
 							},
 							Body: factory.NewBodyStmt(
 								factory.NewExprStmt(factory.NewSelectorCall("log", "Println", factory.NewBasicLit("err"))),
