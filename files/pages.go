@@ -6,12 +6,11 @@ import (
 	"instant-layer/factory"
 )
 
-func MainFile(service *Service, genconfig *GenConfig) *ast.File {
+func MainFile(service *Service, genconfig *GenConfig) *File {
 	imports := CollectImports(map[string]string{
 		service.Name + "/config": "",
 	})
-
-	return factory.NewFileNode(
+	file := factory.NewFileNode(
 		"main",
 		imports,
 		factory.NewFuncDecl(
@@ -29,10 +28,14 @@ func MainFile(service *Service, genconfig *GenConfig) *ast.File {
 			),
 		),
 	)
+	return &File{
+		Name: "main.go",
+		Data: *file,
+	}
 }
 
-func RoutesFile(service *Service, genconfig *GenConfig) *ast.File {
-	return factory.NewFileNode(
+func RoutesFile(service *Service, genconfig *GenConfig) *File {
+	file := factory.NewFileNode(
 		"routes",
 		factory.NewImportDecl(
 			factory.NewImport("net/http", ""),
@@ -65,10 +68,14 @@ func RoutesFile(service *Service, genconfig *GenConfig) *ast.File {
 			),
 		),
 	)
+	return &File{
+		Name: "routes.go",
+		Data: *file,
+	}
 }
 
-func ConfigFile(service *Service, genconfig *GenConfig) *ast.File {
-	return factory.NewFileNode(
+func ConfigFile(service *Service, genconfig *GenConfig) *File {
+	file := factory.NewFileNode(
 		"config",
 		factory.NewImportDecl(
 			factory.NewImport("auth-service/routes", ""),
@@ -214,4 +221,8 @@ func ConfigFile(service *Service, genconfig *GenConfig) *ast.File {
 			),
 		),
 	)
+	return &File{
+		Name: "config.go",
+		Data: *file,
+	}
 }

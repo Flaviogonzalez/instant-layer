@@ -33,7 +33,7 @@ type GenConfig struct {
 }
 
 type ConfigOption func(*GenConfig)
-type ServiceMap map[string][]func(service *Service, config *GenConfig) *ast.File
+type ServiceMap map[string][]func(service *Service, config *GenConfig) *File
 
 var defaultPackageGenerators ServiceMap = ServiceMap{
 	"config":   {ConfigFile},
@@ -48,7 +48,7 @@ func NewGenConfig(options ...ConfigOption) *GenConfig {
 	pkgGens := make(ServiceMap)
 
 	for key, value := range defaultPackageGenerators {
-		newSlice := make([]func(service *Service, config *GenConfig) *ast.File, len(value))
+		newSlice := make([]func(service *Service, config *GenConfig) *File, len(value))
 		copy(newSlice, value)
 		pkgGens[key] = newSlice
 	}
@@ -79,22 +79,22 @@ func WithService(service Service) ConfigOption {
 	}
 }
 
-func WithPackage(name string, gens ...func(*Service, *GenConfig) *ast.File) ConfigOption {
+func WithPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigOption {
 	return func(c *GenConfig) {
 		c.PackageGenerators[name] = gens
 	}
 }
 
-func AddToPackage(name string, gens ...func(*Service, *GenConfig) *ast.File) ConfigOption {
+func AddToPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigOption {
 	return func(c *GenConfig) {
 		if _, ok := c.PackageGenerators[name]; !ok {
-			c.PackageGenerators[name] = make([]func(*Service, *GenConfig) *ast.File, 0)
+			c.PackageGenerators[name] = make([]func(*Service, *GenConfig) *File, 0)
 		}
 		c.PackageGenerators[name] = append(c.PackageGenerators[name], gens...)
 	}
 }
 
-func WithNewPackage(name string, gens ...func(*Service, *GenConfig) *ast.File) ConfigOption {
+func WithNewPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigOption {
 	return WithPackage(name, gens...)
 }
 

@@ -75,7 +75,7 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 					filePath = filepath.Join(servicePath, "main.go")
 				}
 
-				writeFile(fs, filePath, genFunc(&service, &c.GenConfig))
+				writeFile(fs, filePath, &genFunc(&service, &c.GenConfig).Data)
 			}
 		}
 	}
