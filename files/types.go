@@ -4,7 +4,11 @@ import (
 	"go/ast"
 )
 
-// global config
+// ---------------------------------------------------------------------
+// Types (order matters – ServiceMap must be known before it is used)
+// ---------------------------------------------------------------------
+
+type ServiceMap map[string][]func(*Service, *GenConfig) *File
 
 type GenConfig struct {
 	Services          []Service
@@ -13,13 +17,13 @@ type GenConfig struct {
 
 type Config struct {
 	Name      string
-	GenConfig GenConfig
+	GenConfig *GenConfig
 }
 
 type Service struct {
 	ServerType Server
 	Packages   []*Package
-	Name       string // e.g ecommerce-service. defined by the user.
+	Name       string // e.g. ecommerce-service
 }
 
 type Package struct {
@@ -32,37 +36,35 @@ type File struct {
 	Data *ast.File
 }
 
-// Server Connections
-type API struct {
-	Routes []*Route
-}
-
-type Broker struct {
-	Routes []*Route
-}
-
-type Listener struct {
-	Routes []*Route
-}
-
-func (*API) srv()      {}
-func (*Broker) srv()   {}
-func (*Listener) srv() {}
+// ---------------------------------------------------------------------
+// Server hierarchy (interface + concrete types)
+// ---------------------------------------------------------------------
 
 type Server interface {
 	srv()
 }
 
+type API struct{ Routes []*Route }
+type Broker struct{ Routes []*Route }
+type Listener struct{ Routes []*Route }
+
+func (*API) srv()      {}
+func (*Broker) srv()   {}
+func (*Listener) srv() {}
+
+// ---------------------------------------------------------------------
+// Route / Handler / Model
+// ---------------------------------------------------------------------
+
 type Route struct {
 	Path    string // /user
-	Method  string // POST, DELETE, PUT, GET.
+	Method  string // POST, DELETE, PUT, GET
 	Handler Handler
 }
 
 type Handler struct {
-	Name           string // this would be the name of the route + handler.
+	Name           string
 	AttachedModels []Model
-	// more config below
 }
 
 type Model struct {
@@ -75,7 +77,3 @@ type Field struct {
 	Type string // e.g. "int"
 	Json string // e.g. "id"
 }
-
-type ConfigOption func(*GenConfig)
-
-type ServiceMap map[string][]func(service *Service, config *GenConfig) *File

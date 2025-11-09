@@ -11,145 +11,14 @@ import (
 	"path/filepath"
 )
 
-func (c *Config) InitGeneration(outputDir, projectName string) {
-	fs := token.NewFileSet()
-	projectRoot := filepath.Join(outputDir, projectName)
+type ConfigOption func(*GenConfig)
 
-	if err := os.MkdirAll(projectRoot, 0755); err != nil {
-		log.Fatalf("Error creando proyecto: %v", err)
-	}
-
-	for _, service := range c.GenConfig.Services {
-		servicePath := filepath.Join(projectRoot, service.Name)
-		if err := os.MkdirAll(servicePath, 0755); err != nil {
-			log.Fatalf("Error creando servicio '%s': %v", service.Name, err)
-		}
-
-		// go.mod
-		writeGoMod(servicePath, service.Name)
-
-		// Paquetes
-		for packageName, genFuncs := range c.GenConfig.PackageGenerators {
-			pkgPath := filepath.Join(servicePath, packageName)
-			if packageName != "main" {
-				if err := os.MkdirAll(pkgPath, 0755); err != nil {
-					log.Fatalf("Error creando paquete '%s': %v", packageName, err)
-				}
-			}
-
-			for _, genFunc := range genFuncs {
-				var fileName string
-				if packageName == "main" {
-					fileName = "main.go"
-				} else {
-					// here will check for multiple files
-					// notice that if multiple files has the same name it will throw an error.
-					// i don't expect that each handler will stand like {}_handler or {}_handler1, 2
-					fileName = fmt.Sprintf("%s.go", packageName)
-				}
-
-				filePath := filepath.Join(pkgPath, fileName)
-				if packageName == "main" {
-					filePath = filepath.Join(servicePath, "main.go")
-				}
-
-				writeFile(fs, filePath, genFunc(&service, &c.GenConfig).Data)
-			}
-		}
-	}
-
-	log.Printf("Proyecto generado en: %s\n", projectRoot)
-}
-
-func writeFile(fs *token.FileSet, path string, node ast.Node) {
-	var buf bytes.Buffer
-
-	if err := format.Node(&buf, fs, node); err != nil {
-		log.Fatal("Error formateando código:", err)
-	}
-
-	prettyCode, err := format.Source(buf.Bytes())
-	if err != nil {
-		log.Fatal("Error en format.Source (embellecimiento):", err)
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		log.Fatal("Error creando archivo:", err)
-	}
-	defer f.Close()
-
-	if _, err := f.Write(prettyCode); err != nil {
-		log.Fatal("Error escribiendo archivo final:", err)
-	}
-}
-
-func writeGoMod(servicePath, modulePath string) {
-	content := fmt.Sprintf(`module %s
-
-go 1.22
-
-require (
-	github.com/go-chi/chi/v5 v5.1.0
-	github.com/jackc/pgx/v5 v5.5.0
-	github.com/lib/pq v1.10.9
-)
-`, modulePath)
-
-	if err := os.WriteFile(filepath.Join(servicePath, "go.mod"), []byte(content), 0644); err != nil {
-		log.Fatal("Error escribiendo go.mod:", err)
-	}
-}
-
-func (app *GenConfig) GetServices() []string {
-	services := make([]string, 0, len(app.Services))
-	for _, v := range app.Services {
-		services = append(services, v.Name)
-	}
-	return services
-}
-
-var defaultPackageGenerators ServiceMap = ServiceMap{
-	"config":   {ConfigFile},
-	"routes":   {RoutesFile},
-	"main":     {MainFile},
-	"helpers":  {},
-	"handlers": {},
-	"models":   {},
-}
-
-func NewGenConfig(options ...ConfigOption) *GenConfig {
-	pkgGens := make(ServiceMap)
-
-	for key, value := range defaultPackageGenerators {
-		newSlice := make([]func(service *Service, config *GenConfig) *File, len(value))
-		copy(newSlice, value)
-		pkgGens[key] = newSlice
-	}
-
-	config := &GenConfig{
-		Services:          make([]Service, 0),
-		PackageGenerators: pkgGens,
-	}
-
-	for _, option := range options {
-		option(config)
-	}
-
-	config.GenerateServices()
-	return config
-}
-
-func WithService(service Service) ConfigOption {
-	return func(c *GenConfig) {
-		c.Services = append(c.Services, service)
-	}
+func WithService(s Service) ConfigOption {
+	return func(c *GenConfig) { c.Services = append(c.Services, s) }
 }
 
 func WithPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigOption {
-	return func(c *GenConfig) {
-		c.PackageGenerators[name] = gens
-	}
+	return func(c *GenConfig) { c.PackageGenerators[name] = gens }
 }
 
 func AddToPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigOption {
@@ -161,34 +30,163 @@ func AddToPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigO
 	}
 }
 
-func WithNewPackage(name string, gens ...func(*Service, *GenConfig) *File) ConfigOption {
-	return WithPackage(name, gens...)
+// ---------------------------------------------------------------------
+// Default generators
+// ---------------------------------------------------------------------
+
+var defaultPackageGenerators = ServiceMap{
+	"config":   {ConfigFile},
+	"routes":   {RoutesFile},
+	"main":     {MainFile},
+	"helpers":  {},
+	"handlers": {},
+	"models":   {},
 }
+
+// ---------------------------------------------------------------------
+// Public factory
+// ---------------------------------------------------------------------
+
+func NewGenConfig(options ...ConfigOption) *GenConfig {
+	pkgGens := make(ServiceMap)
+	for k, v := range defaultPackageGenerators {
+		pkgGens[k] = append([]func(*Service, *GenConfig) *File(nil), v...)
+	}
+
+	cfg := &GenConfig{
+		Services:          make([]Service, 0),
+		PackageGenerators: pkgGens,
+	}
+
+	for _, opt := range options {
+		opt(cfg)
+	}
+
+	cfg.GenerateServices()
+	return cfg
+}
+
+// ---------------------------------------------------------------------
+// Core generation
+// ---------------------------------------------------------------------
 
 func (c *GenConfig) GenerateServices() {
 	for i := range c.Services {
-		service := &c.Services[i]
+		svc := &c.Services[i]
+		svc.Packages = make([]*Package, 0, len(c.PackageGenerators))
 
-		service.Packages = make([]*Package, 0)
+		for pkgName, gens := range c.PackageGenerators {
+			pkg := &Package{
+				Name:  pkgName,
+				Files: make([]File, 0, len(gens)),
+			}
 
-		for pkgName, generators := range c.PackageGenerators {
-			newPkg := &Package{Name: pkgName, Files: make([]File, 0)}
-
-			for _, genFunc := range generators {
-				if genFunc == nil {
-					continue // will skip if no generator is found
+			for _, gen := range gens {
+				if gen == nil {
+					continue
 				}
-
-				generatedFile := genFunc(service, c)
-
-				if generatedFile != nil {
-					newPkg.Files = append(newPkg.Files, *generatedFile)
+				if f := gen(svc, c); f != nil {
+					pkg.Files = append(pkg.Files, *f)
 				}
 			}
 
-			if len(newPkg.Files) > 0 {
-				service.Packages = append(service.Packages, newPkg)
+			if len(pkg.Files) > 0 {
+				svc.Packages = append(svc.Packages, pkg)
 			}
 		}
 	}
+}
+
+// ---------------------------------------------------------------------
+// Project initialisation (writes files to disk)
+// ---------------------------------------------------------------------
+
+func (c *Config) InitGeneration(outputDir, projectName string) {
+	fset := token.NewFileSet()
+	projectRoot := filepath.Join(outputDir, projectName)
+
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		log.Fatalf("Error creando proyecto: %v", err)
+	}
+
+	for _, svc := range c.GenConfig.Services {
+		svcPath := filepath.Join(projectRoot, svc.Name)
+		if err := os.MkdirAll(svcPath, 0o755); err != nil {
+			log.Fatalf("Error creando servicio '%s': %v", svc.Name, err)
+		}
+
+		writeGoMod(svcPath, fmt.Sprintf("%s", projectName))
+
+		// Packages
+		for _, pkg := range svc.Packages {
+			pkgPath := filepath.Join(svcPath, pkg.Name)
+			if pkg.Name != "main" {
+				if err := os.MkdirAll(pkgPath, 0o755); err != nil {
+					log.Fatalf("Error creando paquete '%s': %v", pkg.Name, err)
+				}
+			}
+
+			for _, file := range pkg.Files {
+				fileName := file.Name
+				filePath := filepath.Join(pkgPath, fileName)
+
+				// main package → always "main.go" at service root
+				if pkg.Name == "main" {
+					fileName = "main.go"
+					filePath = filepath.Join(svcPath, fileName)
+				}
+
+				writeASTFile(fset, filePath, file.Data)
+			}
+		}
+	}
+
+	log.Printf("Proyecto generado en: %s\n", projectRoot)
+}
+
+// ---------------------------------------------------------------------
+// Helper writers
+// ---------------------------------------------------------------------
+
+func writeASTFile(fset *token.FileSet, path string, node ast.Node) {
+	var buf bytes.Buffer
+	if err := format.Node(&buf, fset, node); err != nil {
+		log.Fatalf("Error formateando AST (%s): %v", path, err)
+	}
+	pretty, err := format.Source(buf.Bytes())
+	if err != nil {
+		log.Fatalf("Error en format.Source (%s): %v", path, err)
+	}
+	if err := os.WriteFile(path, pretty, 0o644); err != nil {
+		log.Fatalf("Error escribiendo %s: %v", path, err)
+	}
+}
+
+func writeGoMod(dir, modulePath string) {
+	content := fmt.Sprintf(`module %s
+
+go 1.22
+
+require (
+	github.com/go-chi/chi/v5 v5.1.0
+	github.com/jackc/pgx/v5   v5.5.0
+	github.com/lib/pq         v1.10.9
+)
+`, modulePath)
+
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(content), 0o644); err != nil {
+		log.Fatalf("Error escribiendo go.mod (%s): %v", dir, err)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Utility (list service names)
+// ---------------------------------------------------------------------
+
+func (c *GenConfig) GetServices() []string {
+	out := make([]string, 0, len(c.Services))
+	for _, s := range c.Services {
+		out = append(out, s.Name)
+	}
+	return out
 }

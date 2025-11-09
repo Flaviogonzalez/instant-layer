@@ -10,13 +10,8 @@ func main() {
 
 	config := &files.Config{
 		Name: projectName,
-		GenConfig: files.GenConfig{
-			Services: []files.Service{
-				{
-					Name:       "auth-service",
-					ServerType: &files.API{},
-				},
-			},
+		GenConfig: &files.GenConfig{
+			Services: []files.Service{},
 		},
 	}
 
