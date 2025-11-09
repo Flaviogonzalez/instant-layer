@@ -5,7 +5,7 @@ import (
 )
 
 // ---------------------------------------------------------------------
-// Types (order matters – ServiceMap must be known before it is used)
+// Types
 // ---------------------------------------------------------------------
 
 type ServiceMap map[string][]func(*Service, *GenConfig) *File
@@ -24,6 +24,7 @@ type Service struct {
 	ServerType Server
 	Packages   []*Package
 	Name       string // e.g. ecommerce-service
+	Port       int
 }
 
 type Package struct {
@@ -44,13 +45,54 @@ type Server interface {
 	srv()
 }
 
-type API struct{ Routes []*Route }
-type Broker struct{ Routes []*Route }
-type Listener struct{ Routes []*Route }
+type API struct {
+	DB     Database
+	Routes []*Route
+}
+
+type Broker struct {
+	Routes []*Route
+}
+
+type Listener struct {
+	Routes []*Route
+}
 
 func (*API) srv()      {}
 func (*Broker) srv()   {}
 func (*Listener) srv() {}
+
+// ---------------------------------------------------------------------
+// concrete DB config instances for each type of srv (interface + concrete types)
+// ---------------------------------------------------------------------
+
+type Database struct {
+	TimeoutConn int
+	Driver      string
+	URL         string      // always in .ENV, need to create a .env file with DATABASE_URL={{url}}
+	DataTypes   []*Override // SQLC configuration || maybe using Models to Generate schemas.sql and Routes to generate queries.sql
+}
+
+type Override struct {
+	DBType   string // DB (MYSQL OR PGX)_PREFIX or COLUMN
+	GOType   GoType
+	Tag      GoTag
+	Unsigned bool
+	Nullable bool
+}
+
+type GoTag struct {
+	Type  string // json, bson, etc
+	value string // value
+}
+
+type GoType struct {
+	Import  string
+	Package string
+	Type    string
+	Pointer bool
+	Slice   bool
+}
 
 // ---------------------------------------------------------------------
 // Route / Handler / Model
