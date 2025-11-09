@@ -13,15 +13,8 @@ func main() {
 		GenConfig: files.GenConfig{
 			Services: []files.Service{
 				{
-					Name: "article-service",
-					Connections: []*files.Connection{
-						&files.Connection{
-							Type: &files.GRPC{},
-						},
-						&files.Connection{
-							Type: &files.RPC{},
-						},
-					},
+					Name:       "auth-service",
+					ServerType: &files.API{},
 				},
 			},
 		},

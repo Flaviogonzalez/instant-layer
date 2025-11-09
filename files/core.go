@@ -11,16 +11,6 @@ import (
 	"path/filepath"
 )
 
-type GenConfig struct {
-	Services          []Service
-	PackageGenerators ServiceMap
-}
-
-type Config struct {
-	Name      string
-	GenConfig GenConfig
-}
-
 func (c *Config) InitGeneration(outputDir, projectName string) {
 	fs := token.NewFileSet()
 	projectRoot := filepath.Join(outputDir, projectName)
@@ -111,79 +101,6 @@ require (
 	}
 }
 
-type Service struct {
-	Connections []*Connection
-	Packages    []*Package
-	Name        string // e.g ecommerce-service. defined by the user.
-	Routes      []*Route
-}
-
-type Package struct {
-	Name  string
-	Files []File
-}
-
-type File struct {
-	Name string
-	Data *ast.File
-}
-
-type GRPC struct {
-	lol string
-	// type of config of a gRPC connection
-}
-
-type RPC struct {
-	asd int
-	// type of config of a rpc connection
-}
-
-type JSON struct {
-	blue bool
-	// type of config of a JSON connection
-}
-
-func (*GRPC) connType() {}
-func (*RPC) connType()  {}
-func (*JSON) connType() {}
-
-type asd interface {
-	connType()
-}
-
-// every route in connection will send data through listener and broker with the same DataType
-type Connection struct {
-	Route Route
-	Type  asd
-}
-
-func (app *Connection) asd() {
-	app.Type.connType()
-}
-
-// this info would be passed down by File, to generate the specified content
-type Route struct {
-	Path    string
-	Method  string // POST, DELETE, PUT, GET.
-	Handler Handler
-}
-
-type Handler struct {
-	Name           string // this would be the name of the route + handler.
-	AttachedModels []Model
-}
-
-type Model struct {
-	Name   string // e.g. "User"
-	Fields []Field
-}
-
-type Field struct {
-	Name string // e.g. "ID"
-	Type string // e.g. "int"
-	Json string // e.g. "id"
-}
-
 func (app *GenConfig) GetServices() []string {
 	services := make([]string, 0, len(app.Services))
 	for _, v := range app.Services {
@@ -191,10 +108,6 @@ func (app *GenConfig) GetServices() []string {
 	}
 	return services
 }
-
-type ConfigOption func(*GenConfig)
-
-type ServiceMap map[string][]func(service *Service, config *GenConfig) *File
 
 var defaultPackageGenerators ServiceMap = ServiceMap{
 	"config":   {ConfigFile},
@@ -219,7 +132,6 @@ func NewGenConfig(options ...ConfigOption) *GenConfig {
 		PackageGenerators: pkgGens,
 	}
 
-	// 2. it will apply for each config
 	for _, option := range options {
 		option(config)
 	}
