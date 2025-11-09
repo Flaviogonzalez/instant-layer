@@ -7,7 +7,7 @@ import (
 )
 
 func MainFile(service *Service, genconfig *GenConfig) *File {
-	imports := CollectImports(map[string]string{
+	imports := factory.CollectImports(map[string]string{
 		service.Name + "/config": "",
 	})
 	file := factory.NewFileNode(

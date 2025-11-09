@@ -352,3 +352,11 @@ func NewWriteJson(wExpr ast.Expr, status int, payload ast.Expr, headers ast.Expr
 func NewHttpHeader() ast.Expr {
 	return NewCall(ast.NewIdent("make"), NewSelector("http", "Header"))
 }
+
+func CollectImports(usedPackages map[string]string) *ast.GenDecl {
+	imports := make([]*ast.ImportSpec, 0)
+	for path, alias := range usedPackages {
+		imports = append(imports, NewImport(path, alias))
+	}
+	return NewImportDecl(imports...)
+}
