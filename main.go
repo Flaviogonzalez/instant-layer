@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -12,8 +13,8 @@ import (
 )
 
 type Config struct {
-	Name        string
-	FilesConfig files.FilesConfig
+	Name      string
+	GenConfig files.GenConfig
 }
 
 func main() {
@@ -22,7 +23,7 @@ func main() {
 
 	config := &Config{
 		Name: projectName,
-		FilesConfig: files.FilesConfig{
+		GenConfig: files.GenConfig{
 			Services: []files.Service{
 				{Name: "article-service"},
 			},
@@ -40,7 +41,7 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 		log.Fatalf("Error creando proyecto: %v", err)
 	}
 
-	for _, service := range c.FilesConfig.Services {
+	for _, service := range c.GenConfig.Services {
 		servicePath := filepath.Join(projectRoot, service.Name)
 		if err := os.MkdirAll(servicePath, 0755); err != nil {
 			log.Fatalf("Error creando servicio '%s': %v", service.Name, err)
@@ -50,7 +51,7 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 		writeGoMod(servicePath, service.Name)
 
 		// Paquetes
-		for packageName, genFuncs := range service.GetPackages() {
+		for packageName, genFuncs := range c.GenConfig.PackageGenerators {
 			pkgPath := filepath.Join(servicePath, packageName)
 			if packageName != "main" {
 				if err := os.MkdirAll(pkgPath, 0755); err != nil {
@@ -58,12 +59,15 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 				}
 			}
 
-			for i, genFunc := range genFuncs {
+			for _, genFunc := range genFuncs {
 				var fileName string
 				if packageName == "main" {
 					fileName = "main.go"
 				} else {
-					fileName = fmt.Sprintf("%s_file%d.go", packageName, i)
+					// here will check for multiple files
+					// notice that if multiple files has the same name it will throw an error.
+					// i don't expect that each handler will stand like {}_handler or {}_handler1, 2
+					fileName = fmt.Sprintf("%s.go", packageName)
 				}
 
 				filePath := filepath.Join(pkgPath, fileName)
@@ -71,7 +75,7 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 					filePath = filepath.Join(servicePath, "main.go")
 				}
 
-				writeFile(fs, filePath, genFunc(&service))
+				writeFile(fs, filePath, genFunc(&service, &c.GenConfig))
 			}
 		}
 	}
@@ -80,14 +84,25 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 }
 
 func writeFile(fs *token.FileSet, path string, node ast.Node) {
+	var buf bytes.Buffer
+
+	if err := format.Node(&buf, fs, node); err != nil {
+		log.Fatal("Error formateando código:", err)
+	}
+
+	prettyCode, err := format.Source(buf.Bytes())
+	if err != nil {
+		log.Fatal("Error en format.Source (embellecimiento):", err)
+	}
+
 	f, err := os.Create(path)
 	if err != nil {
 		log.Fatal("Error creando archivo:", err)
 	}
 	defer f.Close()
 
-	if err := format.Node(f, fs, node); err != nil {
-		log.Fatal("Error formateando código:", err)
+	if _, err := f.Write(prettyCode); err != nil {
+		log.Fatal("Error escribiendo archivo final:", err)
 	}
 }
 
