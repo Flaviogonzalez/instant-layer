@@ -50,7 +50,8 @@ func NewGenConfig(options ...ConfigOption) *GenConfig {
 		opt(cfg)
 	}
 
-	cfg.GenerateServices()
+	cfg.loadHandlers()
+	cfg.generateServices()
 	return cfg
 }
 
@@ -58,7 +59,7 @@ func NewGenConfig(options ...ConfigOption) *GenConfig {
 // Core generation
 // ---------------------------------------------------------------------
 
-func (c *GenConfig) GenerateServices() {
+func (c *GenConfig) generateServices() {
 	for i := range c.Services {
 		svc := &c.Services[i]
 		svc.Packages = make([]*Package, 0, len(c.PackageGenerators))
@@ -80,6 +81,24 @@ func (c *GenConfig) GenerateServices() {
 
 			if len(pkg.Files) > 0 {
 				svc.Packages = append(svc.Packages, pkg)
+			}
+		}
+	}
+}
+
+func (c *GenConfig) loadHandlers() {
+	for _, s := range c.Services {
+		if _, ok := s.ServerType.(*API); ok {
+			api := s.ServerType.(*API)
+
+			// for each routegroup
+			for _, group := range api.RoutesConfig.RoutesGroup {
+				for _, route := range group.Routes {
+
+					c.PackageGenerators["handlers"] = append(c.PackageGenerators["handlers"], func(s *Service, c *GenConfig) *File {
+						return createHandlerFile(route.Handler)
+					})
+				}
 			}
 		}
 	}

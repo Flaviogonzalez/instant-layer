@@ -14,7 +14,7 @@ func main() {
 			ServerType: &files.API{
 				DB: files.Database{
 					TimeoutConn: 15,
-					Driver:      "mysql",
+					Driver:      "pgx",
 					URL:         "",
 				},
 				RoutesConfig: files.RoutesConfig{
@@ -22,11 +22,28 @@ func main() {
 						&files.RoutesGroup{
 							Routes: []*files.Route{
 								&files.Route{
-									Path:   "/lol",
-									Method: "POST",
-									Handler: files.Handler{
-										Name: "lol",
-									},
+									Path:    "/createUser",
+									Method:  "POST",
+									Handler: "CreateUser", // always first letter uppercase
+								},
+								&files.Route{
+									Path:    "/deleteUser",
+									Method:  "DELETE",
+									Handler: "DeleteUser", // always first letter uppercase
+								},
+								&files.Route{
+									Path:    "/editUser",
+									Method:  "PUT",
+									Handler: "EditUser", // always first letter uppercase
+								},
+							},
+						},
+						&files.RoutesGroup{
+							Routes: []*files.Route{
+								&files.Route{
+									Path:    "/users",
+									Method:  "GET",
+									Handler: "GetUsers", // always first letter uppercase
 								},
 							},
 						},
@@ -35,8 +52,6 @@ func main() {
 			},
 			Port: 80,
 		}),
-		// files.AddToPackage("routes", files.AuthRoutesFile),
-		// files.AddToPackage("handlers", files.AuthHandlerFile),
 	)
 
 	config := &files.Config{

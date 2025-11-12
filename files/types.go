@@ -123,12 +123,7 @@ type Middleware struct {
 type Route struct {
 	Path    string // /user
 	Method  string // POST, DELETE, PUT, GET
-	Handler Handler
-}
-
-type Handler struct {
-	Name           string
-	AttachedModels []Model
+	Handler string
 }
 
 type Model struct {

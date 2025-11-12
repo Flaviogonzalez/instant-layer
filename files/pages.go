@@ -72,7 +72,7 @@ func RoutesFile(service *Service, genconfig *GenConfig) *File {
 						"r",
 						route.Method,
 						factory.NewBasicLit(route.Path),
-						factory.NewSelector("handlers", route.Handler.Name),
+						factory.NewSelector("handlers", route.Handler),
 					),
 				)
 				groupRoutes = append(groupRoutes, routeStmt)
@@ -326,5 +326,34 @@ func ConfigFile(service *Service, genconfig *GenConfig) *File {
 	return &File{
 		Name: "config.go",
 		Data: file,
+	}
+}
+
+func createHandlerFile(handlerName string) *File {
+
+	handlerFunc := factory.NewFuncDecl(
+		handlerName,
+		factory.NewFieldList(),
+		factory.NewFuncType( // func(w http.ResponseWriter, r *http.Request)
+			factory.NewFieldList(
+				factory.NewField("w", factory.NewSelector("http", "ResponseWriter")),
+				factory.NewField("r", &ast.StarExpr{X: factory.NewSelector("http", "Request")}),
+			),
+			factory.NewFieldList(),
+		),
+		factory.NewBodyStmt(),
+	)
+
+	fileNode := factory.NewFileNode(
+		"handlers",
+		factory.NewImportDecl(
+			factory.NewImport("net/http", ""),
+		),
+		handlerFunc,
+	)
+
+	return &File{
+		Name: handlerName + "Handler.go", // "{}Handler.go"
+		Data: fileNode,
 	}
 }
