@@ -50,17 +50,7 @@ type API struct {
 	RoutesConfig RoutesConfig
 }
 
-type Broker struct {
-	Routes []*Route
-}
-
-type Listener struct {
-	Routes []*Route
-}
-
-func (*API) srv()      {}
-func (*Broker) srv()   {}
-func (*Listener) srv() {}
+func (*API) srv() {}
 
 // ---------------------------------------------------------------------
 // concrete DB config instances for each type of srv (interface + concrete types)
@@ -69,33 +59,11 @@ func (*Listener) srv() {}
 type Database struct {
 	TimeoutConn int
 	Driver      string
-	URL         string      // always in .ENV, need to create a .env file with DATABASE_URL={{url}}
-	DataTypes   []*Override // SQLC configuration || maybe using Models to Generate schemas.sql and Routes to generate queries.sql
-}
-
-type Override struct {
-	DBType   string // DB (MYSQL OR PGX)_PREFIX or COLUMN
-	GOType   GoType
-	Tag      GoTag
-	Unsigned bool
-	Nullable bool
-}
-
-type GoTag struct {
-	Type  string // json, bson, etc
-	value string // value
-}
-
-type GoType struct {
-	Import  string
-	Package string
-	Type    string
-	Pointer bool
-	Slice   bool
+	URL         string // always in .ENV, need to create a .env file with DATABASE_URL={{url}}
 }
 
 // ---------------------------------------------------------------------
-// Route / Handler / Model
+// Route
 // ---------------------------------------------------------------------
 
 type RoutesConfig struct {
@@ -123,7 +91,7 @@ type Middleware struct {
 type Route struct {
 	Path    string // /user
 	Method  string // POST, DELETE, PUT, GET
-	Handler string
+	Handler string // User Implementation.
 }
 
 type Model struct {

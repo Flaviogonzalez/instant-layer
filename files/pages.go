@@ -4,7 +4,9 @@ import (
 	"go/ast"
 	"go/token"
 	"instant-layer/factory"
+	"instant-layer/utils"
 	"strconv"
+	"strings"
 )
 
 func MainFile(service *Service, genconfig *GenConfig) *File {
@@ -67,6 +69,10 @@ func RoutesFile(service *Service, genconfig *GenConfig) *File {
 		for _, group := range apiConfig.RoutesConfig.RoutesGroup {
 			var groupRoutes []ast.Stmt
 			for _, route := range group.Routes {
+				route.Method = strings.ToUpper(route.Method)
+				route.Path = strings.ToLower(route.Path)
+				route.Handler = utils.FirstLetterToUpper(route.Handler)
+
 				routeStmt := factory.NewExprStmt(
 					factory.NewSelectorCall(
 						"r",
@@ -330,7 +336,6 @@ func ConfigFile(service *Service, genconfig *GenConfig) *File {
 }
 
 func createHandlerFile(handlerName string) *File {
-
 	handlerFunc := factory.NewFuncDecl(
 		handlerName,
 		factory.NewFieldList(),
