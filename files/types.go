@@ -7,47 +7,45 @@ import (
 // ---------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------
-
 type ServiceMap map[string][]func(*Service, *GenConfig) *File
 
 type GenConfig struct {
-	Services          []Service
+	Services          []Service `json:"services,omitempty"`
 	PackageGenerators ServiceMap
 }
 
 type Config struct {
-	Name      string
-	GenConfig *GenConfig
+	Name      string     `json:"name,omitempty"`
+	GenConfig *GenConfig `json:"genConfig,omitempty"`
 }
 
 type Service struct {
-	ServerType Server
-	Packages   []*Package
-	Name       string // e.g. ecommerce-service
-	Port       int
+	ServerType Server     `json:"serverType,omitempty"`
+	Packages   []*Package `json:"packages,omitempty"`
+	Name       string     `json:"name,omitempty"` // e.g. ecommerce-service
+	Port       int        `json:"port,omitempty"`
 }
 
 type Package struct {
-	Name  string
-	Files []File
+	Name  string `json:"name,omitempty"`
+	Files []File `json:"files,omitempty"`
 }
 
 type File struct {
-	Name string
-	Data *ast.File
+	Name string    `json:"name,omitempty"`
+	Data *ast.File `json:"data,omitempty"`
 }
 
 // ---------------------------------------------------------------------
 // Server hierarchy (interface + concrete types)
 // ---------------------------------------------------------------------
-
 type Server interface {
 	srv()
 }
 
 type API struct {
-	DB           Database
-	RoutesConfig RoutesConfig
+	DB           Database     `json:"db,omitzero"`
+	RoutesConfig RoutesConfig `json:"routesConfig,omitzero"`
 }
 
 func (*API) srv() {}
@@ -55,43 +53,41 @@ func (*API) srv() {}
 // ---------------------------------------------------------------------
 // concrete DB config instances for each type of srv (interface + concrete types)
 // ---------------------------------------------------------------------
-
 type Database struct {
-	TimeoutConn int
-	Driver      string
-	URL         string // always in .ENV, need to create a .env file with DATABASE_URL={{url}}
+	TimeoutConn int    `json:"timeoutConn,omitempty"`
+	Driver      string `json:"driver,omitempty"`
+	URL         string `json:"url,omitempty"` // always in .ENV, need to create a .env file with DATABASE_URL={{url}}
 }
 
 // ---------------------------------------------------------------------
 // Route
 // ---------------------------------------------------------------------
-
 type RoutesConfig struct {
-	CORS        CorsOptions
-	RoutesGroup []*RoutesGroup
+	CORS        CorsOptions    `json:"cors,omitzero"`
+	RoutesGroup []*RoutesGroup `json:"routesGroup,omitempty"`
 }
 
 type CorsOptions struct {
-	AllowedOrigins   []string
-	AllowedMethods   []string
-	AllowedHeaders   []string
-	AllowCredentials bool
-	MaxAge           int
+	AllowedOrigins   []string `json:"allowedOrigins,omitempty"`
+	AllowedMethods   []string `json:"allowedMethods,omitempty"`
+	AllowedHeaders   []string `json:"allowedHeaders,omitempty"`
+	AllowCredentials bool     `json:"allowCredentials,omitempty"`
+	MaxAge           int      `json:"maxAge,omitempty"`
 }
 
 type RoutesGroup struct {
-	prefix     string
-	Middleware Middleware
-	Routes     []*Route
+	Prefix     string     `json:"prefix,omitempty"`
+	Middleware Middleware `json:"middleware,omitzero"` // todo: omitempty when middleware fulfill
+	Routes     []*Route   `json:"routes,omitempty"`
 }
 
 type Middleware struct {
 }
 
 type Route struct {
-	Path    string // /user
-	Method  string // POST, DELETE, PUT, GET
-	Handler string // User Implementation.
+	Path    string `json:"path,omitempty"`    // /user
+	Method  string `json:"method,omitempty"`  // POST, DELETE, PUT, GET
+	Handler string `json:"handler,omitempty"` // User Implementation.
 }
 
 type Model struct {

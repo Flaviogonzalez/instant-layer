@@ -3,10 +3,11 @@ package files
 import (
 	"go/ast"
 	"go/token"
-	"instant-layer/factory"
-	"instant-layer/utils"
 	"strconv"
 	"strings"
+
+	"github.com/instant-layer/instant-layer/factory"
+	"github.com/instant-layer/instant-layer/utils"
 )
 
 func MainFile(service *Service, genconfig *GenConfig) *File {
@@ -87,7 +88,7 @@ func RoutesFile(service *Service, genconfig *GenConfig) *File {
 				factory.NewSelectorCall(
 					"mux",
 					"Route",
-					factory.NewBasicLit(group.prefix),
+					factory.NewBasicLit(group.Prefix),
 					factory.NewFuncLit(
 						factory.NewFuncType(
 							factory.NewFieldList(

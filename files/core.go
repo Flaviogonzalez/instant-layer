@@ -169,6 +169,10 @@ func writeASTFile(fset *token.FileSet, path string, node ast.Node) {
 	}
 }
 
+func (c *Config) Generate(outputDir string) {
+	c.InitGeneration(outputDir, c.Name)
+}
+
 func writeGoMod(dir, modulePath string) {
 	content := fmt.Sprintf(`module %s
 
