@@ -1,4 +1,4 @@
-module github.com/instant-layer/instant-layer
+module github.com/flaviogonzalez/instant-layer
 
 go 1.25.2
 

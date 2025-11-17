@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/instant-layer/instant-layer/factory"
-	"github.com/instant-layer/instant-layer/utils"
+	"github.com/flaviogonzalez/instant-layer/factory"
+	"github.com/flaviogonzalez/instant-layer/utils"
 )
 
 func MainFile(service *Service, genconfig *GenConfig) *File {

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/instant-layer/instant-layer/internal/cmd"
+	"github.com/flaviogonzalez/instant-layer/internal/cmd"
 )
 
 func main() {
