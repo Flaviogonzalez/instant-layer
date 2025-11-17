@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/instant-layer/instant-layer/files"
+	"github.com/flaviogonzalez/instant-layer/files"
 
 	"github.com/spf13/cobra"
 )
