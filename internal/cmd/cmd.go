@@ -3,10 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/flaviogonzalez/instant-layer/files"
+	"github.com/flaviogonzalez/instant-layer/internal/files"
 
 	"github.com/spf13/cobra"
 )
@@ -20,6 +21,11 @@ func Do(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int 
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
 	rootCmd.SetErr(stderr)
+
+	rootCmd.SetArgs(args)
+	if err := rootCmd.Execute(); err != nil {
+		return 1
+	}
 	return 0
 }
 
@@ -39,8 +45,11 @@ var initCmd = &cobra.Command{
 		}
 		defer f.Close()
 
-		c := definitionConfig("")
-		json, err := json.Marshal(&c)
+		c := definitionConfig("myproject")
+		json, err := json.MarshalIndent(&c, "", "  ")
+		if err != nil {
+			return err
+		}
 		f.Write(json)
 
 		return nil
@@ -51,12 +60,18 @@ var generateCmd = &cobra.Command{
 	Use:   "generate [output]",
 	Short: "Genera el proyecto",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		data, _ := os.ReadFile("instant.json")
+		if len(args) > 0 && args[0] != "" && len(args) > 1 {
+			log.Printf("Output file: %s", args[0])
+		}
+		data, err := os.ReadFile("instant.json")
+		if err != nil {
+			return err
+		}
 
 		var cfg files.Config
 		json.Unmarshal(data, &cfg)
 
-		cfg.Generate(args[0])
+		cfg.InitGeneration(args[0])
 		return nil
 	},
 }
@@ -64,7 +79,7 @@ var generateCmd = &cobra.Command{
 func definitionConfig(projectName string) *files.Config {
 	genCfg := files.NewGenConfig(
 		files.WithService(files.Service{
-			Name: "",
+			Name: "myservice",
 			ServerType: &files.API{
 				DB: files.Database{
 					TimeoutConn: 15,

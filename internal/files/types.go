@@ -10,8 +10,8 @@ import (
 type ServiceMap map[string][]func(*Service, *GenConfig) *File
 
 type GenConfig struct {
-	Services          []Service `json:"services,omitempty"`
-	PackageGenerators ServiceMap
+	Services          []Service  `json:"services,omitempty"`
+	PackageGenerators ServiceMap `json:"-"`
 }
 
 type Config struct {
@@ -21,19 +21,19 @@ type Config struct {
 
 type Service struct {
 	ServerType Server     `json:"serverType,omitempty"`
-	Packages   []*Package `json:"packages,omitempty"`
+	Packages   []*Package `json:"-"`
 	Name       string     `json:"name,omitempty"` // e.g. ecommerce-service
 	Port       int        `json:"port,omitempty"`
 }
 
 type Package struct {
-	Name  string `json:"name,omitempty"`
-	Files []File `json:"files,omitempty"`
+	Name  string
+	Files []File
 }
 
 type File struct {
-	Name string    `json:"name,omitempty"`
-	Data *ast.File `json:"data,omitempty"`
+	Name string
+	Data *ast.File
 }
 
 // ---------------------------------------------------------------------

@@ -94,9 +94,9 @@ func (c *GenConfig) loadHandlers() {
 			// for each routegroup
 			for _, group := range api.RoutesConfig.RoutesGroup {
 				for _, route := range group.Routes {
-
+					handler := route.Handler
 					c.PackageGenerators["handlers"] = append(c.PackageGenerators["handlers"], func(s *Service, c *GenConfig) *File {
-						return createHandlerFile(route.Handler)
+						return createHandlerFile(handler)
 					})
 				}
 			}
@@ -108,9 +108,11 @@ func (c *GenConfig) loadHandlers() {
 // Project initialisation (writes files to disk)
 // ---------------------------------------------------------------------
 
-func (c *Config) InitGeneration(outputDir, projectName string) {
+func (c *Config) InitGeneration(outputDir string) {
+	c.GenConfig.loadHandlers()
+
 	fset := token.NewFileSet()
-	projectRoot := filepath.Join(outputDir, projectName)
+	projectRoot := filepath.Join(outputDir, c.Name)
 
 	if err := os.MkdirAll(projectRoot, 0755); err != nil {
 		log.Fatalf("Error creando proyecto: %v", err)
@@ -122,7 +124,7 @@ func (c *Config) InitGeneration(outputDir, projectName string) {
 			log.Fatalf("Error creando servicio '%s': %v", svc.Name, err)
 		}
 
-		writeGoMod(svcPath, fmt.Sprintf("%s", projectName))
+		writeGoMod(svcPath, fmt.Sprintf("%s", c.Name))
 
 		// Packages
 		for _, pkg := range svc.Packages {
@@ -167,10 +169,6 @@ func writeASTFile(fset *token.FileSet, path string, node ast.Node) {
 	if err := os.WriteFile(path, pretty, 0644); err != nil {
 		log.Fatalf("Error escribiendo %s: %v", path, err)
 	}
-}
-
-func (c *Config) Generate(outputDir string) {
-	c.InitGeneration(outputDir, c.Name)
 }
 
 func writeGoMod(dir, modulePath string) {

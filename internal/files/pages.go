@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/flaviogonzalez/instant-layer/factory"
-	"github.com/flaviogonzalez/instant-layer/utils"
+	"github.com/flaviogonzalez/instant-layer/internal/factory"
+	"github.com/flaviogonzalez/instant-layer/internal/utils"
 )
 
 func MainFile(service *Service, genconfig *GenConfig) *File {
@@ -72,14 +72,14 @@ func RoutesFile(service *Service, genconfig *GenConfig) *File {
 			for _, route := range group.Routes {
 				route.Method = strings.ToUpper(route.Method)
 				route.Path = strings.ToLower(route.Path)
-				route.Handler = utils.FirstLetterToUpper(route.Handler)
+				handlerName := utils.FirstLetterToUpper(route.Handler)
 
 				routeStmt := factory.NewExprStmt(
 					factory.NewSelectorCall(
 						"r",
 						route.Method,
 						factory.NewBasicLit(route.Path),
-						factory.NewSelector("handlers", route.Handler),
+						factory.NewSelector("handlers", handlerName),
 					),
 				)
 				groupRoutes = append(groupRoutes, routeStmt)
@@ -359,7 +359,7 @@ func createHandlerFile(handlerName string) *File {
 	)
 
 	return &File{
-		Name: handlerName + "Handler.go", // "{}Handler.go"
+		Name: strings.ToLower(handlerName) + "_handler.go", // "{}Handler.go"
 		Data: fileNode,
 	}
 }
