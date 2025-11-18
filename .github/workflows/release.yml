@@ -1,0 +1,49 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.2"
+
+      - name: Run tests
+        run: go test ./... -v
+
+      - name: Build binaries
+        run: |
+          mkdir -p build
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o build/instant-layer-linux-amd64
+          GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o build/instant-layer-macos-amd64
+          GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o build/instant-layer-macos-arm64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o build/instant-layer-windows-amd64.exe
+
+      - name: Upload binaries as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: build/
+
+      - name: Release Drafter + attach binaries
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml # nombre exacto del archivo en .github/
+          attach-artifacts: build/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

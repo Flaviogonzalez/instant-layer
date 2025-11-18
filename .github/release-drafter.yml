@@ -1,0 +1,51 @@
+name-template: v$RESOLVED_VERSION
+tag-template: v$RESOLVED_VERSION
+categories:
+  - title: "🚀 Features"
+    labels:
+      - "feat"
+  - title: "🐛 Bug Fixes"
+    labels:
+      - "fix"
+  - title: "📚 Documentation"
+    labels:
+      - "docs"
+  - title: "🧹 Maintenance"
+    labels:
+      - "chore"
+      - "refactor"
+      - "ci"
+      - "test"
+  - title: "⚠️ Breaking Changes"
+    labels:
+      - "breaking"
+      - "feat!"
+
+change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
+version-resolver:
+  major:
+    labels:
+      - "breaking"
+      - "feat!"
+  minor:
+    labels:
+      - "feat"
+  patch:
+    labels:
+      - "fix"
+      - "docs"
+      - "chore"
+      - "refactor"
+      - "ci"
+      - "test"
+      - "perf"
+  default: patch
+
+template: |
+  ## Qué hay de nuevo
+  $CHANGES
+
+  ## 📦 Binarios
+  Los binarios precompilados para Linux, macOS y Windows están adjuntos en esta release.
+
+  **Full Changelog**: https://github.com/Flaviogonzalez/instant-layer/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
