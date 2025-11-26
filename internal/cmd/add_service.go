@@ -54,7 +54,7 @@ func WriteService(path string, s *service.Service) error {
 		}
 
 		for _, f := range p.Files {
-			file, err := os.Create(f.Name)
+			file, err := os.Create(filepath.Join(packagePath, f.Name))
 			if err != nil {
 				return err
 			}
