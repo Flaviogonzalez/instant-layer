@@ -28,7 +28,7 @@ jobs:
 
       - name: Build binaries
         run: |
-          mkdir -p build
+          mkdir -p build ./cmd/layer
           GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o build/instant-layer-linux-amd64
           GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o build/instant-layer-macos-amd64
           GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o build/instant-layer-macos-arm64
