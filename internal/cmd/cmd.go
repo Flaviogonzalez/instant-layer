@@ -1,22 +1,24 @@
 package cmd
 
 import (
-	"encoding/json"
 	"io"
-	"log"
 	"os"
-	"path/filepath"
-
-	"github.com/flaviogonzalez/instant-layer/internal/files"
 
 	"github.com/spf13/cobra"
 )
 
 func Do(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
-	rootCmd := &cobra.Command{Use: "layer", SilenceUsage: true}
+	rootCmd := &cobra.Command{
+		Use:          "layer",
+		Short:        "Instant Layer — Generador de servicios y arquitectura en Go",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
 
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(newCmd)
+	rootCmd.AddCommand(addCmd)
 	// unit-tests
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
@@ -29,74 +31,63 @@ func Do(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int 
 	return 0
 }
 
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Create an instant.json settings file in the current directory.",
+var newCmd = &cobra.Command{
+	Use:   "new",
+	Short: "creates root directory.",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
 			return err
 		}
-		resolvedPath := filepath.Join(wd, "instant.json")
 
-		f, err := os.Create(resolvedPath)
-		if err != nil {
-			return err
+		var dir string
+		if len(args) == 1 {
+			dir = args[0]
 		}
-		defer f.Close()
 
-		c := definitionConfig("myproject")
-		json, err := json.MarshalIndent(&c, "", "  ")
-		if err != nil {
-			return err
-		}
-		f.Write(json)
-
-		return nil
+		return StartGeneration(wd, dir)
 	},
 }
 
-var generateCmd = &cobra.Command{
-	Use:   "generate [output]",
-	Short: "Genera el proyecto",
+var addCmd = &cobra.Command{
+	Use:   "add",
+	Short: "creates a new service, route, handler, middleware",
+}
+
+var addServiceCmd = &cobra.Command{
+	Use:   "service",
+	Short: "creates a new service",
+	Args:  cobra.ExactArgs(0),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) > 0 && args[0] != "" && len(args) > 1 {
-			log.Printf("Output file: %s", args[0])
-		}
-		data, err := os.ReadFile("instant.json")
+		dir, err := os.Getwd()
 		if err != nil {
-			return err
+			return nil
 		}
-
-		var cfg files.Config
-		json.Unmarshal(data, &cfg)
-
-		cfg.InitGeneration(args[0])
-		return nil
+		return SelectAndGenerateTemplate(dir)
 	},
 }
 
-func definitionConfig(projectName string) *files.Config {
-	genCfg := files.NewGenConfig(
-		files.WithService(files.Service{
-			Name: "myservice",
-			ServerType: &files.API{
-				DB: files.Database{
-					TimeoutConn: 15,
-					Driver:      "pgx",
-					URL:         "",
-				},
-				RoutesConfig: files.RoutesConfig{
-					RoutesGroup: []*files.RoutesGroup{},
-				},
-			},
-			Port: 80,
-		}),
-	)
+var addHandlerCmd = &cobra.Command{
+	Use:   "handler [name]",
+	Short: "creates a new handler",
+	Args:  cobra.RangeArgs(0, 1),
+	Run: func(cmd *cobra.Command, args []string) {
 
-	config := &files.Config{
-		Name:      projectName,
-		GenConfig: genCfg,
-	}
-	return config
+	},
+}
+
+var addRouteCmd = &cobra.Command{
+	Use:   "route [name]",
+	Short: "creates a new route",
+	Args:  cobra.RangeArgs(0, 1),
+	Run: func(cmd *cobra.Command, args []string) {
+
+	},
+}
+
+func init() {
+	addCmd.AddCommand(addServiceCmd)
+	addCmd.AddCommand(addHandlerCmd)
+	addCmd.AddCommand(addRouteCmd)
 }
