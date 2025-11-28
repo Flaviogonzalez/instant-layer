@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/flaviogonzalez/instant-layer/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +20,7 @@ func Do(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int 
 
 	rootCmd.AddCommand(newCmd)
 	rootCmd.AddCommand(addCmd)
+	rootCmd.AddCommand(hydrateCmd)
 	// unit-tests
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
@@ -68,26 +70,35 @@ var addServiceCmd = &cobra.Command{
 	},
 }
 
-var addHandlerCmd = &cobra.Command{
-	Use:   "handler [name]",
-	Short: "creates a new handler",
-	Args:  cobra.RangeArgs(0, 1),
-	Run: func(cmd *cobra.Command, args []string) {
+var hydrateCmd = &cobra.Command{
+	Use:   "hydrate",
+	Short: "project analysis and regeneration",
+	Args:  cobra.ExactArgs(0),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
 
-	},
-}
+		root, err := config.FindLayerRoot(wd)
+		if err != nil {
+			return err
+		}
 
-var addRouteCmd = &cobra.Command{
-	Use:   "route [name]",
-	Short: "creates a new route",
-	Args:  cobra.RangeArgs(0, 1),
-	Run: func(cmd *cobra.Command, args []string) {
+		l := &config.Layer{Root: root}
+		err = l.Reload()
+		if err != nil {
+			return err
+		}
 
+		err = l.Hydrate()
+		if err != nil {
+			return err
+		}
+		return nil
 	},
 }
 
 func init() {
 	addCmd.AddCommand(addServiceCmd)
-	addCmd.AddCommand(addHandlerCmd)
-	addCmd.AddCommand(addRouteCmd)
 }

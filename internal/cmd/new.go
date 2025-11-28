@@ -2,48 +2,50 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"path/filepath"
 	"time"
 
 	"github.com/flaviogonzalez/instant-layer/internal/config"
-	service "github.com/flaviogonzalez/instant-layer/internal/services"
+	"github.com/flaviogonzalez/instant-layer/internal/templ"
+	"github.com/flaviogonzalez/instant-layer/internal/types"
 	"github.com/manifoldco/promptui"
 )
 
 func StartGeneration(wd, dir string) error {
 	resolvedRoot, err := resolveProjectRoot(wd, dir)
-
-	if dir == "" {
-		dir = "./"
-	}
-
 	if err != nil {
 		return err
 	}
 
-	layer := &config.Layer{
-		Name:        dir,
-		Root:        resolvedRoot,
-		Services:    []*service.Service{},
-		GeneratedAt: time.Now(),
+	// Extract project name from resolved root
+	projectName := filepath.Base(resolvedRoot)
+	if dir == "./" {
+		projectName = filepath.Base(wd)
 	}
 
-	log.Println(layer)
+	layer := &config.Layer{
+		Name:        projectName,
+		Root:        resolvedRoot,
+		Services:    []*types.Service{},
+		GeneratedAt: time.Now(),
+	}
 
 	if err := layer.Save(); err != nil {
 		return fmt.Errorf("failed to save layer config: %w", err)
 	}
 
-	// 5. Offer to create the first service
+	fmt.Printf("Project '%s' initialized at: %s\n", projectName, resolvedRoot)
+
+	// Offer to create the first service
 	if shouldAddFirstService() {
 		if err := addFirstService(layer); err != nil {
 			fmt.Printf("Warning: First service not created: %v\n", err)
 			fmt.Println("You can add services later with: layer add service")
-		} else {
-			// Regenerate docker-compose with the new service
-			_ = layer.Reload() // refresh from disk
-			_ = layer.RegenerateDockerCompose()
+		}
+	} else {
+		// Generate empty docker-compose.yml
+		if err := generateEmptyDockerCompose(layer); err != nil {
+			fmt.Printf("Warning: docker-compose.yml not created: %v\n", err)
 		}
 	}
 
@@ -58,12 +60,22 @@ func shouldAddFirstService() bool {
 		Default:   "y",
 	}
 	result, err := prompt.Run()
-	return err == nil && (result == "y" || result == "Y")
+	return err == nil && (result == "y" || result == "Y" || result == "")
 }
 
 func addFirstService(layer *config.Layer) error {
 	fmt.Println("Let's create your first service")
-	return SelectAndGenerateTemplate(layer.Root) // reuse your existing logic, now with layer context
+	return SelectAndGenerateTemplate(layer.Root)
+}
+
+func generateEmptyDockerCompose(layer *config.Layer) error {
+	data := templ.DockerComposeData{
+		Name:     layer.Name,
+		Services: []*templ.ServiceData{},
+	}
+
+	dockerComposePath := filepath.Join(layer.Root, "docker-compose.yml")
+	return templ.GenerateDockerCompose(dockerComposePath, data)
 }
 
 func resolveProjectRoot(wd, dir string) (string, error) {

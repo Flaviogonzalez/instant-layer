@@ -1,0 +1,9 @@
+module {{.Name}}
+
+go {{.GoVersion}}
+
+{{if .Dependencies}}
+require (
+{{range .Dependencies}}	{{.Path}} {{.Version}}
+{{end}})
+{{end}}

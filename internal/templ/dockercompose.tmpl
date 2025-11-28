@@ -1,0 +1,22 @@
+name: {{.Name}}
+
+services:
+{{range .Services}}  {{.Name}}:
+    build:
+      context: ./{{.Name}}
+      dockerfile: Dockerfile
+    ports:
+      - "{{.Port}}:{{.Port}}"
+    environment:
+      - PORT={{.Port}}
+{{if .DB}}      - DATABASE_URL={{.DB.URL}}
+{{end}}{{if .DependsOn}}    depends_on:
+{{range .DependsOn}}      - {{.}}
+{{end}}{{end}}    restart: unless-stopped
+    networks:
+      - {{$.Name}}-network
+
+{{end}}
+networks:
+  {{.Name}}-network:
+    driver: bridge

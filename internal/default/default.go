@@ -5,14 +5,14 @@ import (
 	"go/token"
 
 	"github.com/flaviogonzalez/instant-layer/internal/factory"
-	service "github.com/flaviogonzalez/instant-layer/internal/services"
+	"github.com/flaviogonzalez/instant-layer/internal/types"
 )
 
 type Template struct {
 	ID          string
 	Name        string
 	Description string
-	Service     *service.Service
+	Service     *types.Service
 }
 
 var AvailableTemplates = []*Template{
@@ -28,7 +28,7 @@ var AvailableTemplates = []*Template{
 	{
 		ID:          "custom",
 		Name:        "custom api-service",
-		Description: "configurable scaffolding service.",
+		Description: "configurable scaffolding types.",
 		Service: DefaultService(
 			WithName("custom-api-service"),
 			WithPort(8081),
@@ -46,7 +46,7 @@ var AvailableTemplates = []*Template{
 	{
 		ID:          "listener",
 		Name:        "listener-service",
-		Description: "preconfigured listener-service.",
+		Description: "preconfigured listener-types.",
 		Service: DefaultService(
 			WithName("listener-service"),
 			WithPort(8083),
@@ -54,19 +54,26 @@ var AvailableTemplates = []*Template{
 	},
 }
 
-func DefaultService(opts ...Option) *service.Service {
-	s := &service.Service{Port: 8080}
+func DefaultService(opts ...Option) *types.Service {
+	s := &types.Service{Port: 8080}
 
+	// Apply user options first (like WithName) so s.Name is set
+	// before generating files that depend on it
+	for _, o := range opts {
+		o(s)
+	}
+
+	// Now apply base options that generate files using s.Name
 	baseOpts := []Option{
 		WithPostgres(),
 		WithMain(),
 		WithRoutes(),
 	}
 
-	return applyOptions(s, append(baseOpts, opts...)...)
+	return applyOptions(s, baseOpts...)
 }
 
-func DefaultConfigFile(s *service.Service) *service.File {
+func DefaultConfigFile(s *types.Service) *types.File {
 	// Base imports (always included)
 	importSpecs := []*ast.ImportSpec{
 		factory.NewImport(s.Name+"/routes", ""),
@@ -78,7 +85,7 @@ func DefaultConfigFile(s *service.Service) *service.File {
 	}
 
 	// Driver name for sql.Open
-	driverName := ""
+	var driverName string
 
 	// Only pgx supported for now
 	if s.DB != nil && s.DB.Driver == "pgx" {
@@ -152,7 +159,7 @@ func DefaultConfigFile(s *service.Service) *service.File {
 
 	// Patch: the if needs init statement
 	initServerFunc.Body.List[1] = &ast.IfStmt{
-		Init: factory.NewDefineExpectsError("_", factory.NewSelectorCall("server", "ListenAndServe")),
+		Init: factory.NewAssignExpectsError(factory.NewSelectorCall("server", "ListenAndServe")),
 		Cond: &ast.BinaryExpr{
 			X:  ast.NewIdent("err"),
 			Op: token.NEQ,
@@ -245,7 +252,7 @@ func DefaultConfigFile(s *service.Service) *service.File {
 		),
 	)
 
-	return &service.File{
+	return &types.File{
 		Name: "config.go",
 		Content: factory.NewFileNode("config",
 			imports,
@@ -259,7 +266,7 @@ func DefaultConfigFile(s *service.Service) *service.File {
 	}
 }
 
-func DefaultMainFile(s *service.Service) *service.File {
+func DefaultMainFile(s *types.Service) *types.File {
 	// import "{service-name}/config"
 	imports := factory.NewImportDecl(
 		factory.NewImport(s.Name+"/config", ""),
@@ -283,13 +290,13 @@ func DefaultMainFile(s *service.Service) *service.File {
 		),
 	)
 
-	return &service.File{
+	return &types.File{
 		Name:    "main.go",
 		Content: factory.NewFileNode("main", imports, mainFunc),
 	}
 }
 
-func DefaultRoutesFile(s *service.Service) *service.File {
+func DefaultRoutesFile(s *types.Service) *types.File {
 	// Build imports dynamically
 	importSpecs := []*ast.ImportSpec{
 		factory.NewImport(s.Name+"/handlers", ""),
@@ -413,7 +420,7 @@ func DefaultRoutesFile(s *service.Service) *service.File {
 		factory.NewBodyStmt(bodyStmts...),
 	)
 
-	return &service.File{
+	return &types.File{
 		Name:    "routes.go",
 		Content: factory.NewFileNode("routes", imports, routesFunc),
 	}
@@ -449,14 +456,14 @@ func routeMethodCall(muxName, method, path, handler string) *ast.CallExpr {
 // DefaultHandlersPackage generates a handlers package with one file per handler.
 // Each handler file contains an empty function stub for business logic.
 // Duplicate handler names are skipped.
-func DefaultHandlersPackage(s *service.Service) *service.Package {
+func DefaultHandlersPackage(s *types.Service) *types.Package {
 	if s.RoutesConfig == nil {
 		return nil
 	}
 
 	// Track seen handler names to detect duplicates
 	seen := make(map[string]bool)
-	var files []*service.File
+	var files []*types.File
 
 	for _, group := range s.RoutesConfig.RoutesGroup {
 		for _, route := range group.Routes {
@@ -483,7 +490,7 @@ func DefaultHandlersPackage(s *service.Service) *service.Package {
 		return nil
 	}
 
-	return &service.Package{
+	return &types.Package{
 		Name:  "handlers",
 		Files: files,
 	}
@@ -492,7 +499,7 @@ func DefaultHandlersPackage(s *service.Service) *service.Package {
 // createHandlerFile creates a single handler file with an empty function body.
 // File name: {handlerName}.go (e.g., LoginHandler.go)
 // Function signature: func {handlerName}(w http.ResponseWriter, r *http.Request)
-func createHandlerFile(handlerName string) *service.File {
+func createHandlerFile(handlerName string) *types.File {
 	imports := factory.NewImportDecl(
 		factory.NewImport("net/http", ""),
 	)
@@ -511,7 +518,7 @@ func createHandlerFile(handlerName string) *service.File {
 		factory.NewBodyStmt(), // Empty body - business logic placeholder
 	)
 
-	return &service.File{
+	return &types.File{
 		Name:    handlerName + ".go",
 		Content: factory.NewFileNode("handlers", imports, handlerFunc),
 	}

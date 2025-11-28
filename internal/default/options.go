@@ -1,11 +1,11 @@
 package defaults
 
-import service "github.com/flaviogonzalez/instant-layer/internal/services"
+import "github.com/flaviogonzalez/instant-layer/internal/types"
 
-type TemplateFactory func(...Option) *service.Service
-type Option func(*service.Service)
+type TemplateFactory func(...Option) *types.Service
+type Option func(*types.Service)
 
-func applyOptions(s *service.Service, opts ...Option) *service.Service {
+func applyOptions(s *types.Service, opts ...Option) *types.Service {
 	for _, o := range opts {
 		o(s)
 	}
@@ -13,54 +13,54 @@ func applyOptions(s *service.Service, opts ...Option) *service.Service {
 }
 
 func WithName(name string) Option {
-	return func(s *service.Service) {
+	return func(s *types.Service) {
 		s.Name = name
 	}
 }
 
 func WithPort(port int) Option {
-	return func(s *service.Service) {
+	return func(s *types.Service) {
 		s.Port = port
 	}
 }
 
 func WithPostgres() Option {
-	return func(s *service.Service) {
-		s.DB = &service.Database{
+	return func(s *types.Service) {
+		s.DB = &types.Database{
 			Driver:      "pgx",
 			Port:        5432,
 			TimeoutConn: 10,
 		}
 		s.Packages = append(s.Packages,
-			&service.Package{Name: "config", Files: []*service.File{DefaultConfigFile(s)}},
+			&types.Package{Name: "config", Files: []*types.File{DefaultConfigFile(s)}},
 		)
 	}
 }
 
 func WithMain() Option {
-	return func(s *service.Service) {
+	return func(s *types.Service) {
 		s.Packages = append(s.Packages,
-			&service.Package{
+			&types.Package{
 				Name:  "cmd",
-				Files: []*service.File{DefaultMainFile(s)},
+				Files: []*types.File{DefaultMainFile(s)},
 			},
 		)
 	}
 }
 
 func WithRoutes() Option {
-	return func(s *service.Service) {
+	return func(s *types.Service) {
 		s.Packages = append(s.Packages,
-			&service.Package{
+			&types.Package{
 				Name:  "routes",
-				Files: []*service.File{DefaultRoutesFile(s)},
+				Files: []*types.File{DefaultRoutesFile(s)},
 			},
 		)
 	}
 }
 
 func WithHandlers() Option {
-	return func(s *service.Service) {
+	return func(s *types.Service) {
 		s.Packages = append(s.Packages, DefaultHandlersPackage(s))
 	}
 }
