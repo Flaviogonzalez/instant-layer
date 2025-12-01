@@ -64,3 +64,59 @@ func WithHandlers() Option {
 		s.Packages = append(s.Packages, DefaultHandlersPackage(s))
 	}
 }
+
+// WithBrokerEvent adds the broker event package (emitter + event)
+func WithBrokerEvent() Option {
+	return func(s *types.Service) {
+		s.Packages = append(s.Packages, BrokerEventPackage(s))
+	}
+}
+
+// WithListenerEvent adds the listener event package (consumer + event)
+func WithListenerEvent() Option {
+	return func(s *types.Service) {
+		s.Packages = append(s.Packages, ListenerEventPackage(s))
+	}
+}
+
+// WithBrokerConfig adds the config for broker service (no DB, with RabbitMQ)
+func WithBrokerConfig() Option {
+	return func(s *types.Service) {
+		s.Packages = append(s.Packages,
+			&types.Package{Name: "config", Files: []*types.File{BrokerConfigFile(s)}},
+		)
+	}
+}
+
+// WithListenerConfig adds the config for listener service (no HTTP server)
+func WithListenerConfig() Option {
+	return func(s *types.Service) {
+		s.Packages = append(s.Packages,
+			&types.Package{Name: "config", Files: []*types.File{ListenerConfigFile(s)}},
+		)
+	}
+}
+
+// WithBrokerMain adds main.go for broker service
+func WithBrokerMain() Option {
+	return func(s *types.Service) {
+		s.Packages = append(s.Packages,
+			&types.Package{
+				Name:  "cmd",
+				Files: []*types.File{BrokerMainFile(s)},
+			},
+		)
+	}
+}
+
+// WithListenerMain adds main.go for listener service
+func WithListenerMain() Option {
+	return func(s *types.Service) {
+		s.Packages = append(s.Packages,
+			&types.Package{
+				Name:  "cmd",
+				Files: []*types.File{ListenerMainFile(s)},
+			},
+		)
+	}
+}

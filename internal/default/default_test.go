@@ -3,6 +3,7 @@ package defaults
 import (
 	"bytes"
 	"go/format"
+	"go/parser"
 	"go/printer"
 	"go/token"
 	"strings"
@@ -11,20 +12,46 @@ import (
 	"github.com/flaviogonzalez/instant-layer/internal/types"
 )
 
-// renderAST renders an AST file node to string for testing
-func renderAST(node interface{}) string {
+// renderAST renders an AST file node to string for testing.
+// Returns error if the AST cannot be printed or formatted.
+func renderAST(node interface{}) (string, error) {
 	var buf bytes.Buffer
 	fset := token.NewFileSet()
 
 	if err := printer.Fprint(&buf, fset, node); err != nil {
-		return ""
+		return "", err
 	}
 
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
-		return buf.String()
+		return "", err
 	}
-	return string(formatted)
+	return string(formatted), nil
+}
+
+// mustRenderAST renders AST and fails test on error
+func mustRenderAST(t *testing.T, node interface{}) string {
+	t.Helper()
+	rendered, err := renderAST(node)
+	if err != nil {
+		t.Fatalf("Failed to render AST: %v", err)
+	}
+	return rendered
+}
+
+// validateGoCode parses the given Go source and returns an error if invalid
+func validateGoCode(source string) error {
+	fset := token.NewFileSet()
+	_, err := parser.ParseFile(fset, "test.go", source, parser.AllErrors)
+	return err
+}
+
+// mustValidateGoCode validates Go source and fails test on error
+func mustValidateGoCode(t *testing.T, source string) {
+	t.Helper()
+	if err := validateGoCode(source); err != nil {
+		t.Fatalf("Generated code is invalid Go:\n%s\n\nError: %v", source, err)
+	}
 }
 
 // TestDefaultService tests the DefaultService constructor
@@ -107,7 +134,8 @@ func TestDefaultServiceNameInGeneratedFiles(t *testing.T) {
 		t.Fatal("config file has no content")
 	}
 
-	rendered := renderAST(configFile.Content)
+	rendered := mustRenderAST(t, configFile.Content)
+	mustValidateGoCode(t, rendered)
 	if !strings.Contains(rendered, "payment-service/routes") {
 		t.Errorf("Config file should import payment-service/routes, got:\n%s", rendered)
 	}
@@ -133,7 +161,8 @@ func TestDefaultConfigFile(t *testing.T) {
 		t.Fatal("File content should not be nil")
 	}
 
-	rendered := renderAST(file.Content)
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
 
 	// Check expected content
 	expectedParts := []string{
@@ -164,7 +193,8 @@ func TestDefaultConfigFileWithoutDB(t *testing.T) {
 	}
 
 	file := DefaultConfigFile(svc)
-	rendered := renderAST(file.Content)
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
 
 	// Should not have pgx imports
 	if strings.Contains(rendered, "github.com/jackc/pgx") {
@@ -185,7 +215,8 @@ func TestDefaultMainFile(t *testing.T) {
 		t.Errorf("File name = %q, want %q", file.Name, "main.go")
 	}
 
-	rendered := renderAST(file.Content)
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
 
 	expectedParts := []string{
 		"package main",
@@ -225,7 +256,8 @@ func TestDefaultRoutesFile(t *testing.T) {
 		t.Errorf("File name = %q, want %q", file.Name, "routes.go")
 	}
 
-	rendered := renderAST(file.Content)
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
 
 	expectedParts := []string{
 		"package routes",
@@ -263,7 +295,8 @@ func TestDefaultRoutesFileWithCORS(t *testing.T) {
 	}
 
 	file := DefaultRoutesFile(svc)
-	rendered := renderAST(file.Content)
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
 
 	expectedParts := []string{
 		"github.com/go-chi/cors",
@@ -290,7 +323,8 @@ func TestDefaultRoutesFileWithoutRoutes(t *testing.T) {
 	}
 
 	file := DefaultRoutesFile(svc)
-	rendered := renderAST(file.Content)
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
 
 	// Should still have basic structure
 	if !strings.Contains(rendered, "package routes") {
@@ -356,7 +390,8 @@ func TestDefaultHandlersPackage(t *testing.T) {
 
 	// Verify handler content
 	for _, f := range pkg.Files {
-		rendered := renderAST(f.Content)
+		rendered := mustRenderAST(t, f.Content)
+		mustValidateGoCode(t, rendered)
 		if !strings.Contains(rendered, "package handlers") {
 			t.Errorf("Handler file %s should have package handlers", f.Name)
 		}
@@ -624,7 +659,8 @@ func TestTemplatesDynamicNames(t *testing.T) {
 			if pkg.Name == "cmd" {
 				for _, f := range pkg.Files {
 					if f.Name == "main.go" && f.Content != nil {
-						rendered := renderAST(f.Content)
+						rendered := mustRenderAST(t, f.Content)
+						mustValidateGoCode(t, rendered)
 						// Should import the correct service config, not a hardcoded one
 						expectedImport := tmpl.Service.Name + "/config"
 						if !strings.Contains(rendered, expectedImport) {
@@ -634,5 +670,541 @@ func TestTemplatesDynamicNames(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestBrokerService tests the BrokerService constructor
+func TestBrokerService(t *testing.T) {
+	svc := BrokerService(
+		WithName("my-broker"),
+		WithPort(8082),
+	)
+
+	if svc.Name != "my-broker" {
+		t.Errorf("Name = %q, want %q", svc.Name, "my-broker")
+	}
+	if svc.Port != 8082 {
+		t.Errorf("Port = %d, want %d", svc.Port, 8082)
+	}
+
+	// Broker should NOT have a DB
+	if svc.DB != nil {
+		t.Error("Broker service should not have DB configured")
+	}
+
+	// Should have config, cmd, routes, event packages
+	packageNames := make(map[string]bool)
+	for _, pkg := range svc.Packages {
+		packageNames[pkg.Name] = true
+	}
+
+	expectedPackages := []string{"config", "cmd", "routes", "event"}
+	for _, expected := range expectedPackages {
+		if !packageNames[expected] {
+			t.Errorf("Broker service missing package: %s", expected)
+		}
+	}
+}
+
+// TestBrokerEventPackage tests the broker event package generation
+func TestBrokerEventPackage(t *testing.T) {
+	svc := &types.Service{Name: "broker-service"}
+	pkg := BrokerEventPackage(svc)
+
+	if pkg.Name != "event" {
+		t.Errorf("Package name = %q, want %q", pkg.Name, "event")
+	}
+
+	if len(pkg.Files) != 2 {
+		t.Errorf("Should have 2 files (emitter.go, event.go), got %d", len(pkg.Files))
+	}
+
+	fileNames := make(map[string]bool)
+	for _, f := range pkg.Files {
+		fileNames[f.Name] = true
+	}
+
+	if !fileNames["emitter.go"] {
+		t.Error("Missing emitter.go")
+	}
+	if !fileNames["event.go"] {
+		t.Error("Missing event.go")
+	}
+}
+
+// TestBrokerEmitterFile tests the emitter.go generation for broker
+func TestBrokerEmitterFile(t *testing.T) {
+	svc := &types.Service{Name: "broker-service"}
+	pkg := BrokerEventPackage(svc)
+
+	var emitterFile *types.File
+	for _, f := range pkg.Files {
+		if f.Name == "emitter.go" {
+			emitterFile = f
+			break
+		}
+	}
+
+	if emitterFile == nil {
+		t.Fatal("emitter.go not found")
+	}
+
+	rendered := mustRenderAST(t, emitterFile.Content)
+	mustValidateGoCode(t, rendered)
+
+	expectedParts := []string{
+		"package event",
+		"type Emitter struct",
+		"func NewEmitter",
+		"func (e *Emitter) Push",
+		"func (e *Emitter) SendResponse",
+		"github.com/rabbitmq/amqp091-go",
+		"github.com/google/uuid",
+		"amqp.Connection",
+		"amqp.Publishing",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(rendered, part) {
+			t.Errorf("emitter.go should contain %q", part)
+		}
+	}
+}
+
+// TestBrokerEventFile tests the event.go generation for broker
+func TestBrokerEventFile(t *testing.T) {
+	svc := &types.Service{Name: "broker-service"}
+	pkg := BrokerEventPackage(svc)
+
+	var eventFile *types.File
+	for _, f := range pkg.Files {
+		if f.Name == "event.go" {
+			eventFile = f
+			break
+		}
+	}
+
+	if eventFile == nil {
+		t.Fatal("event.go not found")
+	}
+
+	rendered := mustRenderAST(t, eventFile.Content)
+	mustValidateGoCode(t, rendered)
+
+	expectedParts := []string{
+		"package event",
+		"type EventPayload struct",
+		"type TopicPayload struct",
+		"func ConnectToRabbit",
+		"func SendToListener",
+		"json.RawMessage",
+		"amqp.Dial",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(rendered, part) {
+			t.Errorf("event.go should contain %q", part)
+		}
+	}
+}
+
+// TestBrokerConfigFile tests the config.go generation for broker
+func TestBrokerConfigFile(t *testing.T) {
+	svc := &types.Service{Name: "broker-service"}
+	file := BrokerConfigFile(svc)
+
+	if file.Name != "config.go" {
+		t.Errorf("File name = %q, want %q", file.Name, "config.go")
+	}
+
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
+
+	expectedParts := []string{
+		"package config",
+		"broker-service/routes",
+		"type Config struct",
+		"func InitConfig",
+		"func (app *Config) InitServer",
+		"routes.Routes",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(rendered, part) {
+			t.Errorf("Broker config.go should contain %q, got:\n%s", part, rendered)
+		}
+	}
+
+	// Should NOT have database-related code
+	if strings.Contains(rendered, "database/sql") {
+		t.Error("Broker config.go should not have database imports")
+	}
+	if strings.Contains(rendered, "connectToDB") {
+		t.Error("Broker config.go should not have connectToDB")
+	}
+}
+
+// TestBrokerMainFile tests the main.go generation for broker
+func TestBrokerMainFile(t *testing.T) {
+	svc := &types.Service{Name: "broker-service"}
+	file := BrokerMainFile(svc)
+
+	if file.Name != "main.go" {
+		t.Errorf("File name = %q, want %q", file.Name, "main.go")
+	}
+
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
+
+	expectedParts := []string{
+		"package main",
+		"broker-service/config",
+		"func main()",
+		"config.InitConfig",
+		"InitServer",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(rendered, part) {
+			t.Errorf("Broker main.go should contain %q", part)
+		}
+	}
+}
+
+// TestListenerService tests the ListenerService constructor
+func TestListenerService(t *testing.T) {
+	svc := ListenerService(
+		WithName("my-listener"),
+	)
+
+	if svc.Name != "my-listener" {
+		t.Errorf("Name = %q, want %q", svc.Name, "my-listener")
+	}
+
+	// Listener should NOT have a DB
+	if svc.DB != nil {
+		t.Error("Listener service should not have DB configured")
+	}
+
+	// Should have config, cmd, event packages (no routes for listener)
+	packageNames := make(map[string]bool)
+	for _, pkg := range svc.Packages {
+		packageNames[pkg.Name] = true
+	}
+
+	expectedPackages := []string{"config", "cmd", "event"}
+	for _, expected := range expectedPackages {
+		if !packageNames[expected] {
+			t.Errorf("Listener service missing package: %s", expected)
+		}
+	}
+
+	// Should NOT have routes package
+	if packageNames["routes"] {
+		t.Error("Listener service should not have routes package")
+	}
+}
+
+// TestListenerEventPackage tests the listener event package generation
+func TestListenerEventPackage(t *testing.T) {
+	svc := &types.Service{Name: "listener-service"}
+	pkg := ListenerEventPackage(svc)
+
+	if pkg.Name != "event" {
+		t.Errorf("Package name = %q, want %q", pkg.Name, "event")
+	}
+
+	if len(pkg.Files) != 2 {
+		t.Errorf("Should have 2 files (consumer.go, event.go), got %d", len(pkg.Files))
+	}
+
+	fileNames := make(map[string]bool)
+	for _, f := range pkg.Files {
+		fileNames[f.Name] = true
+	}
+
+	if !fileNames["consumer.go"] {
+		t.Error("Missing consumer.go")
+	}
+	if !fileNames["event.go"] {
+		t.Error("Missing event.go")
+	}
+}
+
+// TestListenerConsumerFile tests the consumer.go generation for listener
+func TestListenerConsumerFile(t *testing.T) {
+	svc := &types.Service{Name: "listener-service"}
+	pkg := ListenerEventPackage(svc)
+
+	var consumerFile *types.File
+	for _, f := range pkg.Files {
+		if f.Name == "consumer.go" {
+			consumerFile = f
+			break
+		}
+	}
+
+	if consumerFile == nil {
+		t.Fatal("consumer.go not found")
+	}
+
+	rendered := mustRenderAST(t, consumerFile.Content)
+	mustValidateGoCode(t, rendered)
+
+	expectedParts := []string{
+		"package event",
+		"type handler map",
+		"type Consumer struct",
+		"func NewConsumer",
+		"func (c *Consumer) Setup",
+		"func (c *Consumer) Listen",
+		"github.com/rabbitmq/amqp091-go",
+		"amqp.Connection",
+		"amqp.Delivery",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(rendered, part) {
+			t.Errorf("consumer.go should contain %q", part)
+		}
+	}
+}
+
+// TestListenerEventFile tests the event.go generation for listener
+func TestListenerEventFile(t *testing.T) {
+	svc := &types.Service{Name: "listener-service"}
+	pkg := ListenerEventPackage(svc)
+
+	var eventFile *types.File
+	for _, f := range pkg.Files {
+		if f.Name == "event.go" {
+			eventFile = f
+			break
+		}
+	}
+
+	if eventFile == nil {
+		t.Fatal("event.go not found")
+	}
+
+	rendered := mustRenderAST(t, eventFile.Content)
+	mustValidateGoCode(t, rendered)
+
+	expectedParts := []string{
+		"package event",
+		"type EventPayload struct",
+		"func ConnectToRabbit",
+		"func (c *Consumer) handlePayload",
+		"json.RawMessage",
+		"amqp.Dial",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(rendered, part) {
+			t.Errorf("listener event.go should contain %q", part)
+		}
+	}
+}
+
+// TestListenerConfigFile tests the config.go generation for listener
+func TestListenerConfigFile(t *testing.T) {
+	svc := &types.Service{Name: "listener-service"}
+	file := ListenerConfigFile(svc)
+
+	if file.Name != "config.go" {
+		t.Errorf("File name = %q, want %q", file.Name, "config.go")
+	}
+
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
+
+	expectedParts := []string{
+		"package config",
+		"listener-service/event",
+		"type Config struct",
+		"Conn",
+		"amqp.Connection",
+		"func InitConfig",
+		"func (app *Config) StartListening",
+		"event.ConnectToRabbit",
+		"event.NewConsumer",
+		"consumer.Setup",
+		"consumer.Listen",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(rendered, part) {
+			t.Errorf("Listener config.go should contain %q, got:\n%s", part, rendered)
+		}
+	}
+
+	// Should NOT have HTTP server code
+	if strings.Contains(rendered, "InitServer") {
+		t.Error("Listener config.go should not have InitServer")
+	}
+	if strings.Contains(rendered, "http.Server") {
+		t.Error("Listener config.go should not have http.Server")
+	}
+}
+
+// TestListenerMainFile tests the main.go generation for listener
+func TestListenerMainFile(t *testing.T) {
+	svc := &types.Service{Name: "listener-service"}
+	file := ListenerMainFile(svc)
+
+	if file.Name != "main.go" {
+		t.Errorf("File name = %q, want %q", file.Name, "main.go")
+	}
+
+	rendered := mustRenderAST(t, file.Content)
+	mustValidateGoCode(t, rendered)
+
+	expectedParts := []string{
+		"package main",
+		"listener-service/config",
+		"func main()",
+		"config.InitConfig",
+		"StartListening",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(rendered, part) {
+			t.Errorf("Listener main.go should contain %q", part)
+		}
+	}
+
+	// Should NOT call InitServer
+	if strings.Contains(rendered, "InitServer") {
+		t.Error("Listener main.go should not call InitServer")
+	}
+}
+
+// TestWithBrokerEvent tests the WithBrokerEvent option
+func TestWithBrokerEvent(t *testing.T) {
+	svc := &types.Service{Name: "test-broker"}
+	WithBrokerEvent()(svc)
+
+	hasEvent := false
+	for _, pkg := range svc.Packages {
+		if pkg.Name == "event" {
+			hasEvent = true
+			// Verify it has emitter.go and event.go
+			fileNames := make(map[string]bool)
+			for _, f := range pkg.Files {
+				fileNames[f.Name] = true
+			}
+			if !fileNames["emitter.go"] {
+				t.Error("Broker event package should have emitter.go")
+			}
+			if !fileNames["event.go"] {
+				t.Error("Broker event package should have event.go")
+			}
+			break
+		}
+	}
+	if !hasEvent {
+		t.Error("WithBrokerEvent should add event package")
+	}
+}
+
+// TestWithListenerEvent tests the WithListenerEvent option
+func TestWithListenerEvent(t *testing.T) {
+	svc := &types.Service{Name: "test-listener"}
+	WithListenerEvent()(svc)
+
+	hasEvent := false
+	for _, pkg := range svc.Packages {
+		if pkg.Name == "event" {
+			hasEvent = true
+			// Verify it has consumer.go and event.go
+			fileNames := make(map[string]bool)
+			for _, f := range pkg.Files {
+				fileNames[f.Name] = true
+			}
+			if !fileNames["consumer.go"] {
+				t.Error("Listener event package should have consumer.go")
+			}
+			if !fileNames["event.go"] {
+				t.Error("Listener event package should have event.go")
+			}
+			break
+		}
+	}
+	if !hasEvent {
+		t.Error("WithListenerEvent should add event package")
+	}
+}
+
+// TestBrokerTemplateStructure tests the broker template from AvailableTemplates
+func TestBrokerTemplateStructure(t *testing.T) {
+	var brokerTemplate *Template
+	for _, tmpl := range AvailableTemplates {
+		if tmpl.ID == "broker" {
+			brokerTemplate = tmpl
+			break
+		}
+	}
+
+	if brokerTemplate == nil {
+		t.Fatal("Broker template not found")
+	}
+
+	svc := brokerTemplate.Service
+
+	// Check expected packages exist
+	packageNames := make(map[string]bool)
+	for _, pkg := range svc.Packages {
+		packageNames[pkg.Name] = true
+	}
+
+	if !packageNames["event"] {
+		t.Error("Broker template should have event package")
+	}
+	if !packageNames["routes"] {
+		t.Error("Broker template should have routes package")
+	}
+	if !packageNames["config"] {
+		t.Error("Broker template should have config package")
+	}
+	if !packageNames["cmd"] {
+		t.Error("Broker template should have cmd package")
+	}
+}
+
+// TestListenerTemplateStructure tests the listener template from AvailableTemplates
+func TestListenerTemplateStructure(t *testing.T) {
+	var listenerTemplate *Template
+	for _, tmpl := range AvailableTemplates {
+		if tmpl.ID == "listener" {
+			listenerTemplate = tmpl
+			break
+		}
+	}
+
+	if listenerTemplate == nil {
+		t.Fatal("Listener template not found")
+	}
+
+	svc := listenerTemplate.Service
+
+	// Check expected packages exist
+	packageNames := make(map[string]bool)
+	for _, pkg := range svc.Packages {
+		packageNames[pkg.Name] = true
+	}
+
+	if !packageNames["event"] {
+		t.Error("Listener template should have event package")
+	}
+	if !packageNames["config"] {
+		t.Error("Listener template should have config package")
+	}
+	if !packageNames["cmd"] {
+		t.Error("Listener template should have cmd package")
+	}
+
+	// Listener should NOT have routes
+	if packageNames["routes"] {
+		t.Error("Listener template should NOT have routes package")
 	}
 }

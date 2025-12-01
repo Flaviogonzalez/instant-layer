@@ -13,43 +13,80 @@ import (
 
 // TestGenerateServiceGoMod tests go.mod generation for services
 func TestGenerateServiceGoMod(t *testing.T) {
-	tmpDir := t.TempDir()
-	servicePath := filepath.Join(tmpDir, "test-service")
-
-	if err := os.MkdirAll(servicePath, 0755); err != nil {
-		t.Fatalf("Failed to create service dir: %v", err)
+	tests := []struct {
+		name           string
+		serviceName    string
+		templateID     string
+		wantDeps       []string
+		wantMissingDep string
+	}{
+		{
+			name:        "default service with postgres",
+			serviceName: "auth-service",
+			templateID:  "auth",
+			wantDeps:    []string{"go-chi/chi", "jackc/pgx"},
+		},
+		{
+			name:           "broker service with rabbitmq",
+			serviceName:    "broker-service",
+			templateID:     "broker",
+			wantDeps:       []string{"go-chi/chi", "rabbitmq/amqp091-go", "google/uuid"},
+			wantMissingDep: "jackc/pgx",
+		},
+		{
+			name:           "listener service with rabbitmq",
+			serviceName:    "listener-service",
+			templateID:     "listener",
+			wantDeps:       []string{"go-chi/chi", "rabbitmq/amqp091-go"},
+			wantMissingDep: "jackc/pgx",
+		},
 	}
 
-	err := generateServiceGoMod(servicePath, "test-service")
-	if err != nil {
-		t.Fatalf("generateServiceGoMod() error = %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			servicePath := filepath.Join(tmpDir, tt.serviceName)
 
-	// Verify go.mod was created
-	goModPath := filepath.Join(servicePath, "go.mod")
-	content, err := os.ReadFile(goModPath)
-	if err != nil {
-		t.Fatalf("Failed to read go.mod: %v", err)
-	}
+			if err := os.MkdirAll(servicePath, 0755); err != nil {
+				t.Fatalf("Failed to create service dir: %v", err)
+			}
 
-	contentStr := string(content)
+			err := generateServiceGoMod(servicePath, tt.serviceName, tt.templateID)
+			if err != nil {
+				t.Fatalf("generateServiceGoMod() error = %v", err)
+			}
 
-	// Check module name
-	if !strings.Contains(contentStr, "module test-service") {
-		t.Error("go.mod should contain module name")
-	}
+			// Verify go.mod was created
+			goModPath := filepath.Join(servicePath, "go.mod")
+			content, err := os.ReadFile(goModPath)
+			if err != nil {
+				t.Fatalf("Failed to read go.mod: %v", err)
+			}
 
-	// Check go version
-	if !strings.Contains(contentStr, "go "+templ.DefaultGoVersion()) {
-		t.Error("go.mod should contain Go version")
-	}
+			contentStr := string(content)
 
-	// Check dependencies
-	if !strings.Contains(contentStr, "go-chi/chi") {
-		t.Error("go.mod should contain chi dependency")
-	}
-	if !strings.Contains(contentStr, "jackc/pgx") {
-		t.Error("go.mod should contain pgx dependency")
+			// Check module name
+			if !strings.Contains(contentStr, "module "+tt.serviceName) {
+				t.Errorf("go.mod should contain module name %s", tt.serviceName)
+			}
+
+			// Check go version
+			if !strings.Contains(contentStr, "go "+templ.DefaultGoVersion()) {
+				t.Error("go.mod should contain Go version")
+			}
+
+			// Check expected dependencies
+			for _, dep := range tt.wantDeps {
+				if !strings.Contains(contentStr, dep) {
+					t.Errorf("go.mod should contain %s dependency", dep)
+				}
+			}
+
+			// Check missing dependencies (for broker/listener)
+			if tt.wantMissingDep != "" && strings.Contains(contentStr, tt.wantMissingDep) {
+				t.Errorf("go.mod should NOT contain %s dependency for %s", tt.wantMissingDep, tt.templateID)
+			}
+		})
 	}
 }
 

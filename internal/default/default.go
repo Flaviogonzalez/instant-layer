@@ -37,8 +37,8 @@ var AvailableTemplates = []*Template{
 	{
 		ID:          "broker",
 		Name:        "broker-service",
-		Description: "preconfigured broker-service with no connections.",
-		Service: DefaultService(
+		Description: "preconfigured broker-service with RabbitMQ event emitter.",
+		Service: BrokerService(
 			WithName("broker-service"),
 			WithPort(8082),
 		),
@@ -46,10 +46,9 @@ var AvailableTemplates = []*Template{
 	{
 		ID:          "listener",
 		Name:        "listener-service",
-		Description: "preconfigured listener-types.",
-		Service: DefaultService(
+		Description: "preconfigured listener-service with RabbitMQ consumer.",
+		Service: ListenerService(
 			WithName("listener-service"),
-			WithPort(8083),
 		),
 	},
 }

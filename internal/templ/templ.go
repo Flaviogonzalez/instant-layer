@@ -49,7 +49,7 @@ func DefaultDependencies() []Dependency {
 
 // DefaultGoVersion returns the latest stable Go version
 func DefaultGoVersion() string {
-	return "1.23"
+	return "1.25.2"
 }
 
 // GenerateGoMod generates a go.mod file for a service

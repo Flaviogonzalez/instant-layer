@@ -15,8 +15,13 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
-// SelectAndGenerateTemplate prompts user to select a template and generates a service
 func SelectAndGenerateTemplate(root string) error {
+	// First, find the layer root (where layer.json is)
+	layerRoot, err := config.FindLayerRoot(root)
+	if err != nil {
+		return fmt.Errorf("layer.json not found. Run 'layer new' first to create a project")
+	}
+
 	if len(defaults.AvailableTemplates) == 0 {
 		return fmt.Errorf("no templates available")
 	}
@@ -39,13 +44,25 @@ func SelectAndGenerateTemplate(root string) error {
 		return err
 	}
 
-	// Create the service with the user-provided name and port
-	service := defaults.DefaultService(
-		defaults.WithName(serviceName),
-		defaults.WithPort(servicePort),
-	)
+	var service *types.Service
+	switch selected.ID {
+	case "broker":
+		service = defaults.BrokerService(
+			defaults.WithName(serviceName),
+			defaults.WithPort(servicePort),
+		)
+	case "listener":
+		service = defaults.ListenerService(
+			defaults.WithName(serviceName),
+		)
+	default:
+		service = defaults.DefaultService(
+			defaults.WithName(serviceName),
+			defaults.WithPort(servicePort),
+		)
+	}
 
-	servicePath := filepath.Join(root, serviceName)
+	servicePath := filepath.Join(layerRoot, serviceName)
 	if err := os.MkdirAll(servicePath, 0755); err != nil {
 		return fmt.Errorf("failed to create service directory: %w", err)
 	}
@@ -56,17 +73,17 @@ func SelectAndGenerateTemplate(root string) error {
 	}
 
 	// Generate go.mod for the service
-	if err := generateServiceGoMod(servicePath, serviceName); err != nil {
+	if err := generateServiceGoMod(servicePath, serviceName, selected.ID); err != nil {
 		return fmt.Errorf("failed to generate go.mod: %w", err)
 	}
 
 	// Update layer.json with the new service
-	if err := updateLayerWithService(root, service); err != nil {
+	if err := updateLayerWithService(layerRoot, service); err != nil {
 		return fmt.Errorf("failed to update layer.json: %w", err)
 	}
 
 	// Regenerate docker-compose.yml
-	if err := regenerateDockerCompose(root); err != nil {
+	if err := regenerateDockerCompose(layerRoot); err != nil {
 		return fmt.Errorf("failed to regenerate docker-compose: %w", err)
 	}
 
@@ -75,17 +92,34 @@ func SelectAndGenerateTemplate(root string) error {
 }
 
 // generateServiceGoMod creates a go.mod file for the service
-func generateServiceGoMod(servicePath, serviceName string) error {
+func generateServiceGoMod(servicePath, serviceName, templateID string) error {
 	goModPath := filepath.Join(servicePath, "go.mod")
 
 	// Get default dependencies based on what the service uses
 	deps := templ.DefaultDependencies()
 
-	// Add pgx dependency if service uses postgres
-	deps = append(deps, templ.Dependency{
-		Path:    "github.com/jackc/pgx/v5",
-		Version: "v5.6.0",
-	})
+	// Add dependencies based on template type
+	switch templateID {
+	case "broker", "listener":
+		// RabbitMQ dependency
+		deps = append(deps, templ.Dependency{
+			Path:    "github.com/rabbitmq/amqp091-go",
+			Version: "v1.10.0",
+		})
+		if templateID == "broker" {
+			// UUID for correlation IDs
+			deps = append(deps, templ.Dependency{
+				Path:    "github.com/google/uuid",
+				Version: "v1.6.0",
+			})
+		}
+	default:
+		// Default services use postgres
+		deps = append(deps, templ.Dependency{
+			Path:    "github.com/jackc/pgx/v5",
+			Version: "v5.6.0",
+		})
+	}
 
 	data := templ.GoModData{
 		Name:         serviceName,
